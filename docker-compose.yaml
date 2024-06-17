@@ -2,14 +2,13 @@ version: "3.9"
 
 services:
   control-plane:
-    image: registry.synadia.io/control-plane:1.4.2-rc.0
+    image: registry.synadia.io/control-plane:1.4.2
     command: ["server", "start"]
     volumes:
       - ./syn-cp.yaml:/app/syn-cp.yaml
       - cp-data:/app/data
     ports:
       - 8080:8080
-      - 8443:8443
 
   nats1:
     image: docker.io/nats:alpine
@@ -40,6 +39,21 @@ services:
       - ./nats3.conf:/etc/nats/nats-server.conf
       - ./shared.conf:/etc/nats/shared.conf
       - nats3-data:/data
+
+  http-gateway:
+    image: registry.synadia.io/http-gateway:latest
+    environment:
+      NHG_PORT: "8081"
+      NHG_URL: "nats://nats1:4222,nats://nats2:4222,nats://nats3:4222"
+      NHG_TOKENS_BUCKET: "tokens"
+      NHG_PROVIDER_CREDS: "/http-gateway.creds"
+      NHG_DISABLE_LOGGING: "false"
+    ports:
+      - 8081:8081
+    command:
+      - "run"
+    volumes:
+      - ./http-gateway.creds:/http-gateway.creds
 
 volumes:
   cp-data: {}
