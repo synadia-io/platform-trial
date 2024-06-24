@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   control-plane:
     image: registry.synadia.io/control-plane:1.4.2
