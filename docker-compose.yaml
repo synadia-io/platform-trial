@@ -1,6 +1,6 @@
 services:
   control-plane:
-    image: registry.synadia.io/control-plane:1.4.2
+    image: registry.synadia.io/control-plane:latest
     command: ["server", "start"]
     volumes:
       - ./syn-cp.yaml:/app/syn-cp.yaml
