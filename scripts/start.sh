@@ -178,11 +178,6 @@ if ! check_command docker; then
   exit 1
 fi
 
-if ! check_command http 2>&1; then
-  echo "missing httpie; install at $(link 'https://httpie.io/' 'https://httpie.io/')"
-  exit 1
-fi
-
 if ! check_command jq 2>&1; then
   echo "missing jq; install at $(link 'https://jqlang.github.io/jq/' 'https://jqlang.github.io/jq/')"
   exit 1
