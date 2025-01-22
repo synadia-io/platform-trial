@@ -2,6 +2,8 @@
 # shellcheck disable=SC2181
 set -euo pipefail
 
+cd "$(dirname "$0")/.."
+
 # === Usage ===
 declare debug
 declare open
@@ -51,7 +53,6 @@ export DOCKER_CLI_HINTS=false
 
 declare -r BASE_URL='localhost:8080/api/core/beta'
 declare -r ADMIN_USERNAME=admin
-# TODO: randomly generate password?
 declare -r ADMIN_PASSWORD=admin
 declare ADMIN_TOKEN=''
 
