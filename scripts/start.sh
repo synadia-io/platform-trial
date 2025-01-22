@@ -145,6 +145,11 @@ declare -r ADMIN_USERNAME=admin
 declare -r ADMIN_PASSWORD="$(generate_password)"
 declare ADMIN_TOKEN=''
 
+: > .env
+echo "ADMIN_USERNAME=$ADMIN_USERNAME" >> .env
+echo "ADMIN_PASSWORD=$ADMIN_PASSWORD" >> .env
+bold '\nSaved admin username and password to .env\n'
+
 # Make an API request with the generated admin token
 request() {
   METHOD="$1"
@@ -367,7 +372,7 @@ EOF
 docker compose up --detach --wait http-gateway
 
 HTTP_GATEWAY_TOKEN=$(request POST "/nats-users/${HTTP_GATEWAY_NATS_USER_ID}/http-gw-token" | jq --raw-output .token)
-echo "HTTP_GATEWAY_TOKEN=\"${HTTP_GATEWAY_TOKEN}\"" > .env
+echo "HTTP_GATEWAY_TOKEN=\"${HTTP_GATEWAY_TOKEN}\"" >> .env
 bold '\nSaved HTTP_GATEWAY_TOKEN to .env\n'
 
 echo -e "Done bootstrapping Synadia Platform, open the UI at $(link 'http://localhost:8080' 'http://localhost:8080') and log in with:\n\n    username: $(bold 'admin')\n    password: $(bold "$ADMIN_PASSWORD")\n"
