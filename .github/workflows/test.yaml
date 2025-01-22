@@ -12,4 +12,4 @@ jobs:
     steps:
       - name: Test bootstraph.sh
         run: |
-          bash <(curl --location https://raw.githubusercontent.com/synadia-io/platform-trial/refs/heads/update-trial/scripts/bootstrap.sh)
+          bash <(curl --location 'https://raw.githubusercontent.com/synadia-io/platform-trial/refs/heads/update-trial/scripts/bootstrap.sh')
