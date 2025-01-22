@@ -16,6 +16,4 @@ jobs:
           SYNADIA_CR_PASSWORD: ${{ secrets.SYNADIA_CR_PASSWORD }}
         shell: bash
         run: |
-          curl -fsSL https://raw.githubusercontent.com/synadia-io/platform-trial/refs/heads/update-trial/scripts/bootstrap.sh -o bootstrap.sh
-          chmod +x ./bootstrap.sh
-          ./bootstrap.sh
+          bash <(curl -fsSL https://raw.githubusercontent.com/synadia-io/platform-trial/refs/heads/update-trial/scripts/bootstrap.sh)
