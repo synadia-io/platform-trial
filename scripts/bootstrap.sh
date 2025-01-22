@@ -54,6 +54,7 @@ done
 
 if [ -n "$debug" ]; then
   set -x
+  pwd
 fi
 
 git clone https://github.com/synadia-io/platform-trial.git
@@ -94,4 +95,4 @@ echo "$SYNADIA_CR_PASSWORD" | docker login --username "${SYNADIA_CR_USERNAME}" -
 
 cd ./scripts
 chmod u+x ./start.sh
-source ./start.sh --open
+source ./start.sh --open --debug
