@@ -95,4 +95,4 @@ echo "$SYNADIA_CR_PASSWORD" | docker login --username "${SYNADIA_CR_USERNAME}" -
 
 cd ./scripts
 chmod u+x ./start.sh
-source ./start.sh --open --debug
+source ./start.sh
