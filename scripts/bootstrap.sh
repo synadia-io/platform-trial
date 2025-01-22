@@ -89,4 +89,5 @@ fi
 
 echo "$SYNADIA_CR_PASSWORD" | docker login --username "${SYNADIA_CR_USERNAME}" --password-stdin "$SYNADIA_CR_SERVER"
 
-source ./start.sh
+# shellcheck source=./start.sh
+source ./scripts/start.sh
