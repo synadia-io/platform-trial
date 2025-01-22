@@ -316,7 +316,9 @@ echo -e "Done bootstrapping Synadia Platform, open the UI at $(link 'http://loca
 if [ -n "$open" ]; then
   case "$(uname -s)" in
     Linux)
-      xdg-open "http://localhost:8080"
+      if check_command xdg-open; then
+        xdg-open "http://localhost:8080"
+      fi
       ;;
     Darwin)
       open "http://localhost:8080"
