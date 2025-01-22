@@ -17,4 +17,4 @@ jobs:
         shell: bash
         run: |
           curl -fsSL https://raw.githubusercontent.com/synadia-io/platform-trial/refs/heads/update-trial/scripts/bootstrap.sh -o bootstrap.sh
-          bootstrap.sh --debug
+          ./bootstrap.sh --debug
