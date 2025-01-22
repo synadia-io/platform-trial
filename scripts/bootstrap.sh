@@ -54,7 +54,6 @@ done
 
 if [ -n "$debug" ]; then
   set -x
-  pwd
 fi
 
 git clone https://github.com/synadia-io/platform-trial.git

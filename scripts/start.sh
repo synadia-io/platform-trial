@@ -7,11 +7,7 @@
 
 set -euo pipefail
 
-pwd
-
 cd "$(dirname "$0")/.."
-
-pwd
 
 # === Usage ===
 declare debug=
