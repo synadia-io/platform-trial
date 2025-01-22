@@ -2,7 +2,7 @@
 #
 # This script runs the Synadia Platform trial on your system by running Docker
 # containers and bootstrapping the system.
-#
+
 # shellcheck disable=SC2181
 
 set -euo pipefail
@@ -16,7 +16,10 @@ declare open
 
 usage(){
 >&2 cat <<EOF
-Usage: $0
+Usage: $0 [<flags>]
+
+Start the Synadia Platform trial
+
   [ -h | --help ]
   [ -d | --detach ]
   [ -o | --open ]
