@@ -1,5 +1,10 @@
 #!/bin/bash
+#
+# This script runs the Synadia Platform trial on your system by running Docker
+# containers and bootstrapping the system.
+#
 # shellcheck disable=SC2181
+
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

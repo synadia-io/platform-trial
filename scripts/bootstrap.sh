@@ -5,16 +5,8 @@
 
 set -eu
 
-SCRIPT=$(readlink -f "$0")
-SCRIPTPATH=$(dirname "$SCRIPT")
-
 git clone https://github.com/synadia-io/platform-trial.git
 cd ./platform-trial || (echo './platform-trial does not exist' || exit 1)
-
-# --- debug locally without git clone ---
-cp -r "$SCRIPTPATH" ./platform-trial
-
-cd ./platform-trial
 
 declare -r SYNADIA_CR_SERVER=registry.synadia.io
 declare SYNADIA_CR_USERNAME="${SYNADIA_CR_USERNAME-}"
