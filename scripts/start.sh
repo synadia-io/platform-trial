@@ -48,14 +48,6 @@ if [ -n "$debug" ]; then
   set -x
 fi
 
-# === Common vars ===
-export DOCKER_CLI_HINTS=false
-
-declare -r BASE_URL='localhost:8080/api/core/beta'
-declare -r ADMIN_USERNAME=admin
-declare -r ADMIN_PASSWORD=admin
-declare ADMIN_TOKEN=''
-
 # === Common functions ===
 # Print a clickable link with display text
 link() {
@@ -78,6 +70,24 @@ red() {
 check_command() {
   command -v "$1" >/dev/null 2>&1
 }
+
+# generate an alphanumeric password with openssl, falling back if openssl is not installed
+generate_password() {
+  if check_command openssl; then
+    openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 16
+  else
+    printf 'admin'
+  fi
+}
+
+# === Common vars ===
+export DOCKER_CLI_HINTS=false
+
+declare -r BASE_URL='localhost:8080/api/core/beta'
+declare -r ADMIN_USERNAME=admin
+# shellcheck disable=SC2155
+declare -r ADMIN_PASSWORD="$(generate_password)"
+declare ADMIN_TOKEN=''
 
 # Make an API request with the generated admin token
 request() {
@@ -300,7 +310,7 @@ HTTP_GATEWAY_TOKEN=$(request POST "/nats-users/${HTTP_GATEWAY_NATS_USER_ID}/http
 echo "HTTP_GATEWAY_TOKEN=\"${HTTP_GATEWAY_TOKEN}\"" > .env
 bold '\nSaved HTTP_GATEWAY_TOKEN to .env\n'
 
-echo "Done bootstrapping Synadia Platform, open the UI at $(link 'http://localhost:8080' 'http://localhost:8080') and log in with the username $(bold 'admin') and password $(bold 'admin')"
+echo -e "Done bootstrapping Synadia Platform, open the UI at $(link 'http://localhost:8080' 'http://localhost:8080') and log in with:\n\n    username: $(bold 'admin')\n    password: $(bold "$ADMIN_PASSWORD")"
 
 # if --open, open the browser to control plane
 if [ -n "$open" ]; then
