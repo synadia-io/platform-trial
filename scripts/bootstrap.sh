@@ -29,7 +29,7 @@ args=( )
 for arg; do
   case "$arg" in
     --help)            args+=( -h );;
-    --detach)          args+=( -d );;
+    --debug)           args+=( -e );;
     --interactive)     args+=( -i );;
     --password-stdin)  args+=( -p );;
     *)                 args+=( "$arg" );;
