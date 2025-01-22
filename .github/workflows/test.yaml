@@ -14,5 +14,7 @@ jobs:
         env:
           SYNADIA_CR_USERNAME: ${{ secrets.SYNADIA_CR_USERNAME }}
           SYNADIA_CR_PASSWORD: ${{ secrets.SYNADIA_CR_PASSWORD }}
+        shell: bash
         run: |
-          curl --location https://raw.githubusercontent.com/synadia-io/platform-trial/refs/heads/update-trial/scripts/bootstrap.sh | bash -s -- --debug
+          curl -fsSL https://raw.githubusercontent.com/synadia-io/platform-trial/refs/heads/update-trial/scripts/bootstrap.sh -o bootstrap.sh
+          bootstrap.sh --debug
