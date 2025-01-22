@@ -145,7 +145,7 @@ declare -r ADMIN_USERNAME=admin
 declare -r ADMIN_PASSWORD="$(generate_password)"
 declare ADMIN_TOKEN=''
 
-: > .env
+printf '' > .env
 echo "ADMIN_USERNAME=$ADMIN_USERNAME" >> .env
 echo "ADMIN_PASSWORD=$ADMIN_PASSWORD" >> .env
 bold '\nSaved admin username and password to .env\n'
