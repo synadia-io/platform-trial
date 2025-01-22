@@ -56,7 +56,7 @@ while getopts 'hdeo' opt; do
   esac
 done
 
-if [ -n "$debug" ]; then
+if [ -z "$debug" ]; then
   set -x
 fi
 
@@ -378,7 +378,7 @@ bold '\nSaved HTTP_GATEWAY_TOKEN to .env\n'
 echo -e "Done bootstrapping Synadia Platform, open the UI at $(link 'http://localhost:8080' 'http://localhost:8080') and log in with:\n\n    username: $(bold 'admin')\n    password: $(bold "$ADMIN_PASSWORD")\n"
 
 # if --open, open the browser to control plane
-if [ -n "$open" ]; then
+if [ -z "$open" ]; then
   case "$(uname -s)" in
     Linux)
       if check_command xdg-open; then

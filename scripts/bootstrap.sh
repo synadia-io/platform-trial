@@ -52,7 +52,7 @@ while getopts 'heip' opt; do
   esac
 done
 
-if [ -n "$debug" ]; then
+if [ -z "$debug" ]; then
   set -x
 fi
 
@@ -63,7 +63,7 @@ declare -r SYNADIA_CR_SERVER=registry.synadia.io
 declare SYNADIA_CR_USERNAME="${SYNADIA_CR_USERNAME-}"
 declare SYNADIA_CR_PASSWORD="${SYNADIA_CR_PASSWORD-}"
 
-if [ -n "$password_stdin" ]; then
+if [ -z "$password_stdin" ]; then
   IFS= read -r SYNADIA_CR_PASSWORD </dev/stdin
 fi
 
