@@ -71,12 +71,12 @@ if [ -n "$password_stdin" ]; then
   IFS= read -r SYNADIA_CR_PASSWORD </dev/stdin
 fi
 
-if [ -z "$SYNADIA_CR_USERNAME" ] && [ -n "$interactive" ]; then
-  read -rp "$SYNADIA_CR_SERVER username: " SYNADIA_CR_USERNAME
+if [ -n "$interactive" ]; then
+  read -rp "$SYNADIA_CR_SERVER username: " SYNADIA_CR_USERNAME < /dev/tty
 fi
 
-if [ -z "$SYNADIA_CR_PASSWORD" ] && [ -n "$interactive" ]; then
-  read -srp "$SYNADIA_CR_SERVER password: " SYNADIA_CR_PASSWORD
+if [ -n "$interactive" ]; then
+  read -srp "$SYNADIA_CR_SERVER password: " SYNADIA_CR_PASSWORD < /dev/tty
   echo # add newline after reading silent input
 fi
 

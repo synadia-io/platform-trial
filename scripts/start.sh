@@ -58,6 +58,7 @@ done
 
 if [ -n "$debug" ]; then
   set -x
+  pwd
 fi
 
 # === Common functions ===

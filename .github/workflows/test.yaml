@@ -16,7 +16,7 @@ jobs:
           SYNADIA_CR_PASSWORD: ${{ secrets.SYNADIA_CR_PASSWORD }}
         shell: bash
         run: |
-          bash <(curl -fsSL https://raw.githubusercontent.com/synadia-io/platform-trial/refs/heads/update-trial/scripts/bootstrap.sh)          
+          curl -fsSL https://raw.githubusercontent.com/synadia-io/platform-trial/refs/heads/update-trial/scripts/bootstrap.sh | bash -s
       - name: debug
         if: always()
         run: |
