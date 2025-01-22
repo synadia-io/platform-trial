@@ -59,6 +59,9 @@ fi
 git clone https://github.com/synadia-io/platform-trial.git
 cd ./platform-trial || (echo './platform-trial does not exist' || exit 1)
 
+# TODO: remove next line
+git checkout update-trial
+
 declare -r SYNADIA_CR_SERVER=registry.synadia.io
 declare SYNADIA_CR_USERNAME="${SYNADIA_CR_USERNAME-}"
 declare SYNADIA_CR_PASSWORD="${SYNADIA_CR_PASSWORD-}"
