@@ -6,14 +6,16 @@ cd "$(dirname "$0")/.."
 
 # === Usage ===
 declare debug
+declare detach
 declare open
 
 usage(){
 >&2 cat <<EOF
 Usage: $0
   [ -h | --help ]
-  [ -d | --debug ]
+  [ -d | --detach ]
   [ -o | --open ]
+  [ --debug ]
 EOF
 exit 1
 }
@@ -22,10 +24,11 @@ exit 1
 args=( )
 for arg; do
   case "$arg" in
-    --help)  args+=( -h );;
-    --debug) args+=( -d );;
-    --open)  args+=( -o );;
-    *)       args+=( "$arg" );;
+    --help)   args+=( -h );;
+    --detach) args+=( -d );;
+    --debug)  args+=( -e );;
+    --open)   args+=( -o );;
+    *)        args+=( "$arg" );;
   esac
 done
 
@@ -33,10 +36,11 @@ done
 set -- "${args[@]+"${args[@]}"}"
 
 # Handle args
-while getopts 'hdo' opt; do
+while getopts 'hdeo' opt; do
   case $opt in
     h) usage ;;
-    d) debug=1 ;;
+    d) detach=1 ;;
+    e) debug=1 ;;
     o) open=1 ;;
     *)
       >&2 echo "Unsupported option: $1"
@@ -80,6 +84,50 @@ generate_password() {
   fi
 }
 
+# find control-plane container errors
+find_errors() {
+  docker compose logs control-plane | grep -C1 '\[ERROR\]'
+}
+
+# Copy to the clipboard, depending on what CLI tools are available
+copy_to_clipboard() {
+  # macOS
+  if check_command pbcopy; then
+    printf "%s" "$1" | pbcopy
+   # WSL
+  elif check_command clip.exe; then
+    printf "%s" "$1" | clip.exe
+  # Linux
+  elif check_command xsel; then
+    printf "%s" "$1" | xsel --input --clipboard
+  # Linux
+  elif check_command xclip; then
+    printf "%s" "$1" | xclip -selection clipboard
+  fi
+}
+
+# Retry the command until it succeeds or the retry limit is reached
+retry_with_backoff() {
+  set +e
+  CMD="$1"
+  MAX_RETRY="${2-10}"
+  RESULT="$($CMD)"
+  rt="$?"
+  local retries=1
+  while [ "$rt" -ne 0 ]; do
+    sleep 1
+    echo "Retrying... ($retries/$MAX_RETRY)"
+    RESULT="$($CMD)"
+    rt="$?"
+    (( retries+=1 ))
+    if [ $retries -gt "$MAX_RETRY" ]; then
+      exit "$rt"
+    fi
+  done
+  printf '%s' "$RESULT"
+  set -e
+}
+
 # === Common vars ===
 export DOCKER_CLI_HINTS=false
 
@@ -110,7 +158,7 @@ request() {
 
   if [ "${HTTP_CODE}" -gt 399 ]; then
     red "$1 $URL failed with response: [$HTTP_CODE] $(cat "$OUTPUT_FILE")" >&2
-    exit 1
+    exit "${HTTP_CODE}"
   fi
   cat "$OUTPUT_FILE"
   rm "$OUTPUT_FILE"
@@ -143,6 +191,14 @@ docker_cleanup() {
   exit 0
 }
 
+print_control_plane_errors() {
+  rv=$?
+  if [ "$rv" -ne 0 ]; then
+    docker compose logs control-plane | grep '\[ERROR\]'
+  fi
+  exit "$rv"
+}
+
 CONTAINER_RUNNING_COUNT=$(docker compose ps --status running --format json)
 if [ -n "$CONTAINER_RUNNING_COUNT" ]; then
   red 'platform-trial is already running, exiting.' >&2
@@ -150,13 +206,15 @@ if [ -n "$CONTAINER_RUNNING_COUNT" ]; then
 fi
 
 # Stop docker compose on interrupt
-trap docker_cleanup INT
+if [ -z "$detach" ]; then
+  trap docker_cleanup SIGINT
+fi
 
-# TODO: trap exits and run `cleanup` on failures?
+# Print errors from control-plane container if non-zero exit
+trap print_control_plane_errors EXIT
 
 docker compose up --detach control-plane
 echo 'Waiting for control-plane to be ready...'
-# TODO: remove following line with and append `--wait` to the previous line, once HEALTHCHECK is configured in `docker-compose.yaml`
 grep --quiet 'control plane started' <(docker compose logs --follow control-plane)
 echo 'control-plane is ready.'
 
@@ -242,17 +300,13 @@ EOF
 )" >/dev/null
 
 # Wait until NATS system is connected to control plane
-SYSTEM_STATE=$(request GET "/systems/$SYSTEM_ID" | jq --raw-output .state)
-retries=0
-while [ "$SYSTEM_STATE" != 'Connected' ]; do
-  sleep 1
+checkSystemState() {
   SYSTEM_STATE=$(request GET "/systems/$SYSTEM_ID" | jq --raw-output .state)
-  (( retries+=1 ))
-  if [ $retries -gt 10 ]; then
-    red "System failed to connect to NATS server, state is ${SYSTEM_STATE}" >&2
+  if [ "$SYSTEM_STATE" != 'Connected' ]; then
     exit 1
   fi
-done
+}
+retry_with_backoff checkSystemState || (rt=$?; red 'System failed to connect to NATS server' >&2; exit $rt)
 
 # === Create a user and account ===
 ACCOUNT_ID=$(request POST "/systems/$SYSTEM_ID/accounts" --data '{"name":"trial"}' | jq --raw-output .id)
@@ -290,7 +344,10 @@ EOF
 
 request POST "/nats-users/${HTTP_GATEWAY_NATS_USER_ID}/creds" > http-gateway.creds
 
-request POST "/accounts/${HTTP_GATEWAY_ACCOUNT_ID}/jetstream/kv-buckets/" --data '{"bucket":"tokens"}' >/dev/null
+createKVBucket() {
+  request POST "/accounts/${HTTP_GATEWAY_ACCOUNT_ID}/jetstream/kv-buckets/" --data '{"bucket":"tokens"}' >/dev/null
+}
+retry_with_backoff "createKVBucket" || (rt=$?; red 'Failed to create KV bucket for HTTP Gateway account' >&2; exit $rt)
 
 request PATCH "/systems/$SYSTEM_ID/" \
   --data "$(cat <<EOF | jq --compact-output
@@ -310,7 +367,7 @@ HTTP_GATEWAY_TOKEN=$(request POST "/nats-users/${HTTP_GATEWAY_NATS_USER_ID}/http
 echo "HTTP_GATEWAY_TOKEN=\"${HTTP_GATEWAY_TOKEN}\"" > .env
 bold '\nSaved HTTP_GATEWAY_TOKEN to .env\n'
 
-echo -e "Done bootstrapping Synadia Platform, open the UI at $(link 'http://localhost:8080' 'http://localhost:8080') and log in with:\n\n    username: $(bold 'admin')\n    password: $(bold "$ADMIN_PASSWORD")"
+echo -e "Done bootstrapping Synadia Platform, open the UI at $(link 'http://localhost:8080' 'http://localhost:8080') and log in with:\n\n    username: $(bold 'admin')\n    password: $(bold "$ADMIN_PASSWORD")\n"
 
 # if --open, open the browser to control plane
 if [ -n "$open" ]; then
@@ -325,3 +382,6 @@ if [ -n "$open" ]; then
       ;;
   esac
 fi
+
+copy_to_clipboard "$ADMIN_PASSWORD"
+echo -e 'Copied password to the clipboard\n'
