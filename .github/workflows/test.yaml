@@ -1,0 +1,23 @@
+name: Test Scripts
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test Scripts
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test bootstraph.sh
+        env:
+          SYNADIA_CR_USERNAME: ${{ secrets.SYNADIA_CR_USERNAME }}
+          SYNADIA_CR_PASSWORD: ${{ secrets.SYNADIA_CR_PASSWORD }}
+        shell: bash
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/synadia-io/platform-trial/refs/heads/main/scripts/bootstrap.sh | bash -s
+      - name: debug
+        if: always()
+        run: |
+          cat ./platform-trial/.env
