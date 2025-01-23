@@ -95,7 +95,7 @@ generate_password() {
 
 # find control-plane container errors
 find_errors() {
-  docker compose logs control-plane | grep -C1 '\[ERROR\]'
+  $DOCKER_COMPOSE_CMD logs control-plane | grep -C1 '\[ERROR\]'
 }
 
 # Copy to the clipboard, depending on what CLI tools are available
@@ -137,6 +137,18 @@ retry_with_backoff() {
   set -e
 }
 
+# Use `docker compose`, falling back to `docker-compose` if not available
+declare DOCKER_COMPOSE_CMD=
+set_docker_compose() {
+  set +e
+  if docker compose version >/dev/null 2>&1; then
+    DOCKER_COMPOSE_CMD='docker compose'
+  elif docker-composer version >/dev/null 2>&1; then
+    DOCKER_COMPOSE_CMD='docker-compose'
+  fi
+  set -e
+}
+
 # === Common vars ===
 export DOCKER_CLI_HINTS=false
 
@@ -149,7 +161,7 @@ declare ADMIN_TOKEN=''
 printf '' > .env
 echo "ADMIN_USERNAME=$ADMIN_USERNAME" >> .env
 echo "ADMIN_PASSWORD=$ADMIN_PASSWORD" >> .env
-bold '\nSaved admin username and password to .env\n'
+bold '\nSaved ADMIN_USERNAME and ADMIN_PASSWORD to .env\n'
 
 # Make an API request with the generated admin token
 request() {
@@ -179,13 +191,21 @@ request() {
 }
 
 # === Verify required commands ===
+docker_error_msg="\n\nIf you don't have Docker installed, refer to the $(link 'https://docs.docker.com/get-docker/' 'Get Docker') documentation for instructions on how to install Docker Desktop or $(link 'https://docs.docker.com/engine/install/' 'Docker Engine') on your plaform.\n\nAn alternate option is $(link 'https://podman.io/' 'Podman'), which is a daemonless container engine that can be used as a drop-in replacement for Docker.\nIf this is preferred, and $(bold 'podman compose') is configured properly, any reference to $(bold 'docker') in the commands below can be replaced with $(bold 'podman')."
+
 if ! check_command docker; then
-  echo -e "missing docker\n\nIf you don't have Docker installed, refer to the $(link 'https://docs.docker.com/get-docker/' 'Get Docker') documentation for instructions on how to install Docker Desktop or $(link 'https://docs.docker.com/engine/install/' 'Docker Engine') on your plaform.\n\nAn alternate option is $(link 'https://podman.io/' 'Podman'), which is a daemonless container engine that can be used as a drop-in replacement for Docker.\nIf this is preferred, and $(bold 'podman compose') is configured properly, any reference to $(bold 'docker') in the commands below can be replaced with $(bold 'podman')."
+  echo -e "missing $(bold docker)$docker_error_msg"
+  exit 1
+fi
+
+set_docker_compose
+if [ -z "$DOCKER_COMPOSE_CMD" ]; then
+  echo -e "missing $(bold 'docker compose') (or $(bold 'docker-compose'))$docker_error_msg 2>&1" >&2
   exit 1
 fi
 
 if ! check_command jq 2>&1; then
-  echo "missing jq; install at $(link 'https://jqlang.github.io/jq/' 'https://jqlang.github.io/jq/')"
+  echo -e "missing $(bold jq); install at $(link 'https://jqlang.github.io/jq/' 'https://jqlang.github.io/jq/')" >&2
   exit 1
 fi
 
@@ -196,19 +216,19 @@ docker pull registry.synadia.io/control-plane:latest \
 
 # === Start Control Plane ===
 docker_cleanup() {
-  docker compose down --volumes
+  $DOCKER_COMPOSE_CMD down --volumes
   exit 0
 }
 
 print_control_plane_errors() {
   rv=$?
   if [ "$rv" -ne 0 ]; then
-    docker compose logs control-plane | grep '\[ERROR\]'
+    $DOCKER_COMPOSE_CMD logs control-plane | grep '\[ERROR\]'
   fi
   exit "$rv"
 }
 
-CONTAINER_RUNNING_COUNT=$(docker compose ps --status running --format json)
+CONTAINER_RUNNING_COUNT=$($DOCKER_COMPOSE_CMD ps --status running --format json)
 if [ -n "$CONTAINER_RUNNING_COUNT" ]; then
   red 'platform-trial is already running, exiting.' >&2
   exit 1
@@ -222,9 +242,9 @@ fi
 # Print errors from control-plane container if non-zero exit
 trap print_control_plane_errors EXIT
 
-docker compose up --detach control-plane
+$DOCKER_COMPOSE_CMD up --detach control-plane
 echo 'Waiting for control-plane to be ready...'
-grep --quiet 'control plane started' <(docker compose logs --follow control-plane)
+grep --quiet 'control plane started' <($DOCKER_COMPOSE_CMD logs --follow control-plane)
 echo 'control-plane is ready.'
 
 # === Login to Control Plane ===
@@ -293,7 +313,7 @@ echo "$NATS_CONF" > shared.conf
 request PATCH "/systems/$SYSTEM_ID/?test_connection=false" --data '{"connection_type":"Direct"}' >/dev/null
 
 # === Start the NATS cluster ===
-docker compose up --detach --wait nats1 nats2 nats3
+$DOCKER_COMPOSE_CMD up --detach --wait nats1 nats2 nats3
 
 # === Test the NATS connection ===
 request PATCH "/systems/$SYSTEM_ID/?test_connection=true" \
@@ -370,7 +390,7 @@ request PATCH "/systems/$SYSTEM_ID/" \
 EOF
 )" >/dev/null
 
-docker compose up --detach --wait http-gateway
+$DOCKER_COMPOSE_CMD up --detach --wait http-gateway
 
 HTTP_GATEWAY_TOKEN=$(request POST "/nats-users/${HTTP_GATEWAY_NATS_USER_ID}/http-gw-token" | jq --raw-output .token)
 echo "HTTP_GATEWAY_TOKEN=\"${HTTP_GATEWAY_TOKEN}\"" >> .env
