@@ -67,9 +67,6 @@ fi
 git clone https://github.com/synadia-io/platform-trial.git
 cd ./platform-trial || (echo './platform-trial does not exist' || exit 1)
 
-# TODO: remove next line
-git checkout update-trial
-
 # shellcheck source=./common.sh
 . ./scripts/common.sh
 
