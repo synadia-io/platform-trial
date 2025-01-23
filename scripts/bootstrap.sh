@@ -84,13 +84,13 @@ if [ -n "$interactive" ]; then
 fi
 
 if [ -z "$SYNADIA_CR_USERNAME" ] && [ -z "$SYNADIA_CR_PASSWORD" ]; then
-  red "Failed to find Synadia container registry credentials\n\nSet $(bold SYNADIA_CR_USERNAME) and $(bold SYNADIA_CR_PASSWORD) environment variables or enable interactive mode with $(bold '--interactive')"
+  red "\nFailed to find Synadia container registry credentials\n\nSet $(bold SYNADIA_CR_USERNAME) and $(bold SYNADIA_CR_PASSWORD) environment variables or enable interactive mode with $(bold '--interactive')"
   exit 1
 elif [ -z "$SYNADIA_CR_USERNAME" ]; then
-  red "Failed to find Synadia container registry username\n\nSet $(bold SYNADIA_CR_USERNAME) environment variable or enable interactive mode with $(bold '--interactive')"
+  red "\nFailed to find Synadia container registry username\n\nSet $(bold SYNADIA_CR_USERNAME) environment variable or enable interactive mode with $(bold '--interactive')"
   exit 1
 elif [ -z "$SYNADIA_CR_PASSWORD" ]; then
-  red "Failed to find Synadia container registry password\n\nSet $(bold SYNADIA_CR_PASSWORD) environment variable, pipe from stdin with $(bold '--password-stdin'), or enable interactive mode with $(bold '--interactive')"
+  red "\nFailed to find Synadia container registry password\n\nSet $(bold SYNADIA_CR_PASSWORD) environment variable, pipe from stdin with $(bold '--password-stdin'), or enable interactive mode with $(bold '--interactive')"
   exit 1
 fi
 
