@@ -154,11 +154,6 @@ declare -r ADMIN_USERNAME=admin
 declare -r ADMIN_PASSWORD="$(generate_password)"
 declare ADMIN_TOKEN=''
 
-printf '' > .env
-echo "ADMIN_USERNAME=$ADMIN_USERNAME" >> .env
-echo "ADMIN_PASSWORD=$ADMIN_PASSWORD" >> .env
-bold '\nSaved ADMIN_USERNAME and ADMIN_PASSWORD to .env\n'
-
 # Make an API request with the generated admin token
 request() {
   METHOD="$1"
@@ -249,6 +244,12 @@ $DOCKER_COMPOSE_CMD up --detach control-plane
 echo 'Waiting for control-plane to be ready...'
 grep --quiet 'control plane started' <($DOCKER_COMPOSE_CMD logs --follow control-plane)
 echo 'control-plane is ready.'
+
+# Wait until control-plane succesfully starts before (over)writing .env file
+printf '' > .env
+echo "ADMIN_USERNAME=$ADMIN_USERNAME" >> .env
+echo "ADMIN_PASSWORD=$ADMIN_PASSWORD" >> .env
+bold '\nSaved ADMIN_USERNAME and ADMIN_PASSWORD to .env\n'
 
 # === Login to Control Plane ===
 ADMIN_TOKEN=$(request POST /admin/app-user/ \
