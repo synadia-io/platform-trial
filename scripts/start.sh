@@ -13,6 +13,7 @@ cd "$(dirname "$0")/.."
 . ./scripts/common.sh
 
 # === Usage ===
+declare copy_password=
 declare debug=
 declare detach=
 declare open=
@@ -42,11 +43,12 @@ exit 1
 args=( )
 for arg; do
   case "$arg" in
-    --help)   args+=( -h );;
-    --detach) args+=( -d );;
-    --debug)  args+=( -e );;
-    --open)   args+=( -o );;
-    *)        args+=( "$arg" );;
+    --help)          args+=( -h );;
+    --copy-password) args+=( -c );;
+    --detach)        args+=( -d );;
+    --debug)         args+=( -e );;
+    --open)          args+=( -o );;
+    *)               args+=( "$arg" );;
   esac
 done
 
@@ -54,9 +56,10 @@ done
 set -- "${args[@]+"${args[@]}"}"
 
 # Handle args
-while getopts 'hdeo' opt; do
+while getopts 'hcdeo' opt; do
   case $opt in
     h) usage ;;
+    c) copy_password=1 ;;
     d) detach=1 ;;
     e) debug=1 ;;
     o) open=1 ;;
@@ -412,5 +415,7 @@ if [ -n "$open" ]; then
   esac
 fi
 
-copy_to_clipboard "$ADMIN_PASSWORD"
-echo -e 'Copied password to the clipboard\n'
+if [ -n "$copy_password" ]; then
+  copy_to_clipboard "$ADMIN_PASSWORD"
+  echo -e 'Copied admin password to the clipboard\n'
+fi
