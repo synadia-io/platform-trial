@@ -184,7 +184,7 @@ request() {
 # === Verify required commands ===
 docker_error_msg=$(cat <<EOF
 
-If you don't have Docker installed, refer to the $(link 'https://docs.docker.com/get-docker/' 'Get Docker') documentation for instructions on how to install Docker Desktop or $(link 'https://docs.docker.com/engine/install/' 'Docker Engine') on your plaform.
+If you do not have Docker installed, refer to the $(link 'https://docs.docker.com/get-docker/' 'Get Docker') documentation for instructions on how to install Docker Desktop or $(link 'https://docs.docker.com/engine/install/' 'Docker Engine') on your plaform.
 
 An alternate option is $(link 'https://podman.io/' 'Podman'), which is a daemonless container engine that can be used as a drop-in replacement for Docker.
 If this is preferred, and $(bold 'podman compose') is configured properly, any reference to $(bold 'docker') in the commands below can be replaced with $(bold 'podman').
