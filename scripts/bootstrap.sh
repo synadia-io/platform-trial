@@ -16,10 +16,17 @@ Usage: $0 [<flags>]
 
 Bootstrap the Synadia Platform trial
 
-  [ -h | --help ]
-  [ -i | --interactive ]
-  [ -p | --password-stdin ]
-  [ --debug ]
+  -h, --help
+    Print this usage message
+
+  -i, --interactive
+    Prompt for Synadia container registry credentials interactively
+
+  -p, --password-stdin
+    Read the Synadia container registry password from stdin
+
+  --debug
+    Output all commands
 EOF
 exit 1
 }

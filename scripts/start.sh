@@ -23,10 +23,17 @@ Usage: $0 [<flags>]
 
 Start the Synadia Platform trial
 
-  [ -h | --help ]
-  [ -d | --detach ]
-  [ -o | --open ]
-  [ --debug ]
+  -h, --help
+    Print this usage message
+
+  -d, --detach
+    Don't stop the Docker containers on SIGINT
+
+  -o, --open
+    Open the Control Plane UI in the default web browser automatically
+
+  --debug
+    Output all commands
 EOF
 exit 1
 }
