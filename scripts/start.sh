@@ -75,13 +75,6 @@ if [ -n "$debug" ]; then
 fi
 
 # === Common functions ===
-# Print a clickable link with display text
-link() {
-  link="$1"
-  text="$2"
-  printf "\e]8;;%s\a%s\e]8;;\a" "$link" "$text"
-}
-
 # check if the command exists
 check_command() {
   command -v "$1" >/dev/null 2>&1
@@ -194,7 +187,14 @@ request() {
 }
 
 # === Verify required commands ===
-docker_error_msg="\n\nIf you don't have Docker installed, refer to the $(link 'https://docs.docker.com/get-docker/' 'Get Docker') documentation for instructions on how to install Docker Desktop or $(link 'https://docs.docker.com/engine/install/' 'Docker Engine') on your plaform.\n\nAn alternate option is $(link 'https://podman.io/' 'Podman'), which is a daemonless container engine that can be used as a drop-in replacement for Docker.\nIf this is preferred, and $(bold 'podman compose') is configured properly, any reference to $(bold 'docker') in the commands below can be replaced with $(bold 'podman')."
+docker_error_msg=$(cat <<EOF
+
+If you don't have Docker installed, refer to the $(link 'https://docs.docker.com/get-docker/' 'Get Docker') documentation for instructions on how to install Docker Desktop or $(link 'https://docs.docker.com/engine/install/' 'Docker Engine') on your plaform.
+
+An alternate option is $(link 'https://podman.io/' 'Podman'), which is a daemonless container engine that can be used as a drop-in replacement for Docker.
+If this is preferred, and $(bold 'podman compose') is configured properly, any reference to $(bold 'docker') in the commands below can be replaced with $(bold 'podman').
+EOF
+)
 
 if ! check_command docker; then
   echo -e "missing $(bold docker)$docker_error_msg"
@@ -399,7 +399,14 @@ HTTP_GATEWAY_TOKEN=$(request POST "/nats-users/${HTTP_GATEWAY_NATS_USER_ID}/http
 echo "HTTP_GATEWAY_TOKEN=\"${HTTP_GATEWAY_TOKEN}\"" >> .env
 bold '\nSaved HTTP_GATEWAY_TOKEN to .env\n'
 
-echo -e "Done bootstrapping Synadia Platform, open the UI at $(link 'http://localhost:8080' 'http://localhost:8080') and log in with:\n\n    username: $(bold 'admin')\n    password: $(bold "$ADMIN_PASSWORD")\n"
+cat <<EOF
+Done bootstrapping Synadia Platform, open the UI at $(link 'http://localhost:8080') and login with:
+
+    username: $(bold 'admin')
+    password: $(bold "$ADMIN_PASSWORD")
+
+Check out the HTTP Gateway API documentation at $(link 'http://localhost:8081/api/')
+EOF
 
 # if --open, open the browser to control plane
 if [ -n "$open" ]; then
@@ -417,5 +424,5 @@ fi
 
 if [ -n "$copy_password" ]; then
   copy_to_clipboard "$ADMIN_PASSWORD"
-  echo -e 'Copied admin password to the clipboard\n'
+  echo -e 'Copied admin password to the clipboard'
 fi
