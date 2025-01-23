@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # This script runs the Synadia Platform trial on your system by running Docker
 # containers and bootstrapping the system.
