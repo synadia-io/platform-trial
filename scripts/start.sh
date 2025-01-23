@@ -9,6 +9,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# shellcheck source=./common.sh
+. ./scripts/common.sh
+
 # === Usage ===
 declare debug=
 declare detach=
@@ -67,16 +70,6 @@ link() {
   link="$1"
   text="$2"
   printf "\e]8;;%s\a%s\e]8;;\a" "$link" "$text"
-}
-
-# Print text in bold
-bold() {
-  echo -e "\033[1m$1\033[0m"
-}
-
-# Print text in red
-red() {
-  echo -e "\033[31m$1\033[0m"
 }
 
 # check if the command exists
