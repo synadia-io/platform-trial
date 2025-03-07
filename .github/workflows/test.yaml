@@ -15,7 +15,7 @@ jobs:
           SYNADIA_CR_USERNAME: ${{ secrets.SYNADIA_CR_USERNAME }}
           SYNADIA_CR_PASSWORD: ${{ secrets.SYNADIA_CR_PASSWORD }}
         shell: bash
-        run: curl -fsSL https://raw.githubusercontent.com/synadia-io/platform-trial/refs/heads/joeriddles/fix-shutdown-order/scripts/bootstrap.sh | bash -s
+        run: curl -fsSL https://raw.githubusercontent.com/synadia-io/platform-trial/refs/heads/main/scripts/bootstrap.sh | bash -s
       
       - name: Test
         shell: bash
