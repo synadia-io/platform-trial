@@ -17,6 +17,8 @@ jobs:
         shell: bash
         run: |
           curl -fsSL https://raw.githubusercontent.com/synadia-io/platform-trial/refs/heads/main/scripts/bootstrap.sh | bash -s
+          cd ./platform-trial
+          ./scripts/stop.sh
       - name: debug
         if: always()
         run: |
