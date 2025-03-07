@@ -52,6 +52,11 @@ services:
       - "run"
     volumes:
       - ./http-gateway.creds:/http-gateway.creds
+    depends_on:
+      - control-plane
+      - nats1
+      - nats2
+      - nats3
 
 volumes:
   cp-data: {}

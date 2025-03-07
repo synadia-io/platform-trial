@@ -10,14 +10,32 @@ jobs:
     timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
-      - name: Test bootstraph.sh
+      - name: Test bootstrap.sh
         env:
           SYNADIA_CR_USERNAME: ${{ secrets.SYNADIA_CR_USERNAME }}
           SYNADIA_CR_PASSWORD: ${{ secrets.SYNADIA_CR_PASSWORD }}
         shell: bash
+        run: curl -fsSL https://raw.githubusercontent.com/synadia-io/platform-trial/refs/heads/main/scripts/bootstrap.sh | bash -s
+      
+      - name: Test
+        shell: bash
+        working-directory: platform-trial
+        run: ./scripts/test.sh
+      
+      - name: Stop
+        shell: bash
+        working-directory: platform-trial
+        run: ./scripts/stop.sh
+      
+      - name: Debug
+        if: failure()
         run: |
-          curl -fsSL https://raw.githubusercontent.com/synadia-io/platform-trial/refs/heads/main/scripts/bootstrap.sh | bash -s
-      - name: debug
-        if: always()
-        run: |
-          cat ./platform-trial/.env
+          cd ./platform-trial
+          echo '.env:'
+          cat .env
+          echo '\nshared.conf:'
+          cat shared.conf
+          echo '\ntrial.creds:'
+          cat trial.creds
+          echo '\nhttp-gateway.creds:'
+          cat http-gateway.creds
