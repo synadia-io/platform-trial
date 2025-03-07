@@ -10,16 +10,23 @@ jobs:
     timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
-      - name: Test Scripts
+      - name: Test bootstrap.sh
         env:
           SYNADIA_CR_USERNAME: ${{ secrets.SYNADIA_CR_USERNAME }}
           SYNADIA_CR_PASSWORD: ${{ secrets.SYNADIA_CR_PASSWORD }}
         shell: bash
-        run: |
-          curl -fsSL https://raw.githubusercontent.com/synadia-io/platform-trial/refs/heads/joeriddles/fix-shutdown-order/scripts/bootstrap.sh | bash -s
+        run: curl -fsSL https://raw.githubusercontent.com/synadia-io/platform-trial/refs/heads/joeriddles/fix-shutdown-order/scripts/bootstrap.sh | bash -s
           cd ./platform-trial
-          ./scripts/test.sh
-          ./scripts/stop.sh
+      
+      - name: Test
+        shell: bash
+        working-directory: platform-trial
+        run: ./scripts/test.sh
+      
+      - name: Stop
+        shell: bash
+        working-directory: platform-trial
+        run: ./scripts/stop.sh
       
       - name: Debug
         if: failure()
