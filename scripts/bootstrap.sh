@@ -65,8 +65,8 @@ if [ -n "$debug" ]; then
 fi
 
 git clone https://github.com/synadia-io/platform-trial.git
-git checkout joeriddles/fix-shutdown-order
 cd ./platform-trial || (echo './platform-trial does not exist' || exit 1)
+git checkout joeriddles/fix-shutdown-order
 
 # shellcheck source=./common.sh
 . ./scripts/common.sh
