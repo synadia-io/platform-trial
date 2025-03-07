@@ -126,6 +126,7 @@ retry_with_backoff() {
     rt="$?"
     (( retries+=1 ))
     if [ $retries -gt "$MAX_RETRY" ]; then
+      red "Max retries reached ($MAX_RETRY)" >&2
       exit "$rt"
     fi
   done
