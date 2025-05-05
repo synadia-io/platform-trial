@@ -263,6 +263,9 @@ ADMIN_TOKEN=$(request POST /admin/app-user/ \
 EOF
 )" | jq --raw-output .token)
 
+echo "ADMIN_TOKEN=\"${ADMIN_TOKEN}\"" >> .env
+bold '\nSaved ADMIN_TOKEN to .env\n'
+
 TEAM_ID=$(request GET /teams/ | jq --raw-output '.items[0].id')
 
 SYSTEM_RESPONSE=$(request POST "/teams/${TEAM_ID}/systems" \
