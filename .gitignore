@@ -1,3 +1,5 @@
 *.creds
 .env
 shared.conf
+
+configs/nex*
