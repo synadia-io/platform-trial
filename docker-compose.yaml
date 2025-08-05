@@ -14,7 +14,7 @@ services:
       - 4222:4222
       - 8222:8222
     volumes:
-      - ./nats1.conf:/etc/nats/nats-server.conf
+      - ./configs/nats1.conf:/etc/nats/nats-server.conf
       - ./shared.conf:/etc/nats/shared.conf
       - nats1-data:/data
 
@@ -24,7 +24,7 @@ services:
       - 4223:4222
       - 8223:8222
     volumes:
-      - ./nats2.conf:/etc/nats/nats-server.conf
+      - ./configs/nats2.conf:/etc/nats/nats-server.conf
       - ./shared.conf:/etc/nats/shared.conf
       - nats2-data:/data
 
@@ -34,9 +34,45 @@ services:
       - 4224:4222
       - 8224:8222
     volumes:
-      - ./nats3.conf:/etc/nats/nats-server.conf
+      - ./configs/nats3.conf:/etc/nats/nats-server.conf
       - ./shared.conf:/etc/nats/shared.conf
       - nats3-data:/data
+
+  nex1:
+    image: registry.synadia.io/nexce:main
+    command: ["--config", "/nex.config"]
+    volumes:
+      - ./configs/nex1.conf:/nex.config
+      - ./nexus-node.creds:/nexus-node.creds
+    depends_on:
+      - control-plane
+      - nats1
+      - nats2
+      - nats3
+
+  nex2:
+    image: registry.synadia.io/nexce:main
+    command: ["--config", "/nex.config"]
+    volumes:
+      - ./configs/nex2.conf:/nex.config
+      - ./nexus-node.creds:/nexus-node.creds
+    depends_on:
+      - control-plane
+      - nats1
+      - nats2
+      - nats3
+
+  nex3:
+    image: registry.synadia.io/nexce:main
+    command: ["--config", "/nex.config"]
+    volumes:
+      - ./configs/nex3.conf:/nex.config
+      - ./nexus-node.creds:/nexus-node.creds
+    depends_on:
+      - control-plane
+      - nats1
+      - nats2
+      - nats3
 
   http-gateway:
     image: registry.synadia.io/http-gateway:latest
