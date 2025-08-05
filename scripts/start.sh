@@ -146,6 +146,8 @@ set_docker_compose() {
   set -e
 }
 
+declare -r NATS_BIN="$(command -v nats)"
+
 # === Common vars ===
 export DOCKER_CLI_HINTS=false
 
@@ -358,9 +360,98 @@ NATS_USER_ID=$(request POST "/accounts/${ACCOUNT_ID}/nats-users/" \
   "jwt_expires_in_secs": 0
 }
 EOF
-)" | jq --raw-output .id)
+  )" | jq --raw-output .id)
 
-request POST "/nats-users/${NATS_USER_ID}/creds" > trial.creds
+request POST "/nats-users/${NATS_USER_ID}/creds" >trial.creds
+
+# === Setup Nexus ===
+
+# === Create an account and users ===
+NEXUS_ACCOUNT_ID=$(request POST "/systems/$SYSTEM_ID/accounts" --data '{"name":"nexus"}' | jq --raw-output .id)
+
+NEXUS_SK_GROUP_ID=$(request GET "/accounts/${NEXUS_ACCOUNT_ID}/account-sk-groups/" | jq --raw-output '.items[0].id')
+
+NEXUS_NODE_NATS_USER_ID=$(request POST "/accounts/${NEXUS_ACCOUNT_ID}/nats-users/" \
+  --data "$(
+    cat <<EOF | jq --compact-output
+{
+  "name": "nexus_node",
+  "sk_group_id": "${NEXUS_SK_GROUP_ID}",
+  "jwt_expires_in_secs": 0
+}
+EOF
+  )" | jq --raw-output .id)
+
+request POST "/nats-users/${NEXUS_NODE_NATS_USER_ID}/creds" >nexus-node.creds
+
+# NEED PROGRAMATIC KEY
+NEXUS_NEXLET_SK_SEED=$(request POST "/accounts/${NEXUS_ACCOUNT_ID}/account-sk-groups/" \
+  --data "$(
+    cat <<EOF | jq --compact-output
+{
+  "name": "nexus-nexlets",
+  "programmatic": true
+}
+EOF
+  )" | jq --raw-output .seed)
+
+NEXUS_ACCT_PUBKEY=$(request GET "/accounts/${NEXUS_ACCOUNT_ID}" | jq --raw-output '.account_public_key')
+
+generate_nex_node_config() {
+  local node_num="$1"
+
+  cat <<EOF >./configs/nex${node_num}.conf
+{
+  "name": "nex${node_num}",
+  "nexus": "nexus",
+  "tags": {
+    "synadia-platform": "trial"
+  },
+  "node_seed": "$($NATS_BIN auth nkey gen server)",
+  "nats": {
+    "creds_file": "./nexus-node.creds",
+    "servers": [
+      "nats://nats1",
+      "nats://nats2",
+      "nats://nats3"
+    ]
+  },
+  "creds_signing_key": "$NEXUS_NEXLET_SK_SEED",
+  "creds_signing_key_account": "$NEXUS_ACCT_PUBKEY",
+  "allow_remote_register": false,
+  "logger": {
+    "level": "info"
+  },
+  "nexlets": {
+    "native": {
+      "enabled": true,
+      "registerType": "native"
+    },
+    "javascript-deno": {
+      "enabled": true,
+      "registerType": "javascript"
+    }
+  }
+}
+EOF
+}
+
+generate_nex_node_config 1
+generate_nex_node_config 2
+generate_nex_node_config 3
+
+request PATCH "/systems/$SYSTEM_ID/platform-components/" \
+  --data "$(
+    cat <<EOF | jq --compact-output
+{
+  "type": "workloads",
+  "enabled": true,
+  "config": {
+    "account": "$NEXUS_ACCOUNT_ID"
+  }
+}
+EOF
+  )"
 
 # === Setup HTTP Gateway ===
 
@@ -386,10 +477,13 @@ createKVBucket() {
 }
 retry_with_backoff "createKVBucket" || (rt=$?; red 'Failed to create KV bucket for HTTP Gateway account' >&2; exit $rt)
 
-request PATCH "/systems/$SYSTEM_ID/" \
-  --data "$(cat <<EOF | jq --compact-output
+request PATCH "/systems/$SYSTEM_ID/platform-components/" \
+  --data "$(
+    cat <<EOF | jq --compact-output
 {
-  "http_gateway_config": {
+  "type": "http_gateway",
+  "enabled": true,
+  "config": {
     "account": "${HTTP_GATEWAY_ACCOUNT_ID}",
     "token_bucket": "tokens",
     "url": "http://localhost:8081"
@@ -398,6 +492,9 @@ request PATCH "/systems/$SYSTEM_ID/" \
 EOF
 )" >/dev/null
 
+$DOCKER_COMPOSE_CMD up --detach --wait nex1
+$DOCKER_COMPOSE_CMD up --detach --wait nex2
+$DOCKER_COMPOSE_CMD up --detach --wait nex3
 $DOCKER_COMPOSE_CMD up --detach --wait http-gateway
 
 HTTP_GATEWAY_TOKEN=$(request POST "/nats-users/${HTTP_GATEWAY_NATS_USER_ID}/http-gw-token" | jq --raw-output .token)
