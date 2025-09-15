@@ -386,10 +386,13 @@ createKVBucket() {
 }
 retry_with_backoff "createKVBucket" || (rt=$?; red 'Failed to create KV bucket for HTTP Gateway account' >&2; exit $rt)
 
-request PATCH "/systems/$SYSTEM_ID/" \
-  --data "$(cat <<EOF | jq --compact-output
+request PATCH "/systems/$SYSTEM_ID/platform-components/" \
+  --data "$(
+    cat <<EOF | jq --compact-output
 {
-  "http_gateway_config": {
+  "type": "http_gateway",
+  "enabled": true,
+  "config": {
     "account": "${HTTP_GATEWAY_ACCOUNT_ID}",
     "token_bucket": "tokens",
     "url": "http://localhost:8081"

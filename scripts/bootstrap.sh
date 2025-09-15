@@ -9,12 +9,19 @@ set -euo pipefail
 declare debug=
 declare interactive=
 declare password_stdin=
+declare branch=main
 
 usage(){
 >&2 cat <<EOF
 Usage: $0 [<flags>]
 
 Bootstrap the Synadia Platform trial
+
+  -b, --branch <branch>
+    Git branch to checkout (default: main)
+
+  --debug
+    Output all commands
 
   -h, --help
     Print this usage message
@@ -24,9 +31,6 @@ Bootstrap the Synadia Platform trial
 
   -p, --password-stdin
     Read the Synadia container registry password from stdin
-
-  --debug
-    Output all commands
 EOF
 exit 1
 }
@@ -35,8 +39,9 @@ exit 1
 args=( )
 for arg; do
   case "$arg" in
-    --help)            args+=( -h );;
+    --branch)          args+=( -b );;
     --debug)           args+=( -e );;
+    --help)            args+=( -h );;
     --interactive)     args+=( -i );;
     --password-stdin)  args+=( -p );;
     *)                 args+=( "$arg" );;
@@ -47,10 +52,11 @@ done
 set -- "${args[@]+"${args[@]}"}"
 
 # Handle args
-while getopts 'heip' opt; do
+while getopts 'b:ehip' opt; do
   case $opt in
-    h) usage ;;
+    b) branch="$OPTARG" ;;
     e) debug=1 ;;
+    h) usage ;;
     i) interactive=1 ;;
     p) password_stdin=1 ;;
     *)
@@ -66,7 +72,7 @@ fi
 
 git clone https://github.com/synadia-io/platform-trial.git
 cd ./platform-trial || (echo './platform-trial does not exist' || exit 1)
-git checkout main
+git checkout "$branch"
 
 # shellcheck source=./common.sh
 . ./scripts/common.sh
