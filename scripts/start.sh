@@ -16,7 +16,10 @@ cd "$(dirname "$0")/.."
 declare copy_password=
 declare debug=
 declare detach=
+declare nex=
 declare open=
+# Container engine used for the whole stack; docker by default, podman with --podman
+declare CONTAINER_ENGINE='docker'
 
 usage(){
 >&2 cat <<EOF
@@ -30,8 +33,15 @@ Start the Synadia Platform trial
   -d, --detach
     Don't stop the Docker containers on SIGINT
 
+  -n, --nex
+    Start the Nex node without prompting (skipped automatically if podman or nk
+    are missing)
+
   -o, --open
     Open the Control Plane UI in the default web browser automatically
+
+  -p, --podman
+    Run the whole stack with podman instead of docker
 
   --debug
     Output all commands
@@ -47,7 +57,9 @@ for arg; do
     --copy-password) args+=( -c );;
     --detach)        args+=( -d );;
     --debug)         args+=( -e );;
+    --nex)           args+=( -n );;
     --open)          args+=( -o );;
+    --podman)        args+=( -p );;
     *)               args+=( "$arg" );;
   esac
 done
@@ -56,13 +68,15 @@ done
 set -- "${args[@]+"${args[@]}"}"
 
 # Handle args
-while getopts 'hcdeo' opt; do
+while getopts 'hcdenop' opt; do
   case $opt in
     h) usage ;;
     c) copy_password=1 ;;
     d) detach=1 ;;
     e) debug=1 ;;
+    n) nex=1 ;;
     o) open=1 ;;
+    p) CONTAINER_ENGINE='podman' ;;
     *)
       >&2 echo "Unsupported option: $1"
       usage ;;
@@ -91,7 +105,7 @@ generate_password() {
 
 # find control-plane container errors
 find_errors() {
-  $DOCKER_COMPOSE_CMD logs control-plane | grep -C1 '\[ERROR\]'
+  $COMPOSE_CMD logs control-plane | grep -C1 '\[ERROR\]'
 }
 
 # Copy to the clipboard, depending on what CLI tools are available
@@ -171,14 +185,15 @@ get_platform_component_token() {
   request GET "/systems/${system_id}/platform-components/${component_id}/tokens" | jq --raw-output .token
 }
 
-# Use `docker compose`, falling back to `docker-compose` if not available
-declare DOCKER_COMPOSE_CMD=
-set_docker_compose() {
+# Resolve the compose command for the selected engine, preferring the built-in
+# `<engine> compose` subcommand and falling back to the standalone binary.
+declare COMPOSE_CMD=
+set_compose_cmd() {
   set +e
-  if docker compose version >/dev/null 2>&1; then
-    DOCKER_COMPOSE_CMD='docker compose'
-  elif docker-composer version >/dev/null 2>&1; then
-    DOCKER_COMPOSE_CMD='docker-compose'
+  if "$CONTAINER_ENGINE" compose version >/dev/null 2>&1; then
+    COMPOSE_CMD="$CONTAINER_ENGINE compose"
+  elif check_command "${CONTAINER_ENGINE}-compose"; then
+    COMPOSE_CMD="${CONTAINER_ENGINE}-compose"
   fi
   set -e
 }
@@ -229,14 +244,14 @@ If this is preferred, and $(bold 'podman compose') is configured properly, any r
 EOF
 )
 
-if ! check_command docker; then
-  echo -e "missing $(bold docker)$docker_error_msg"
+if ! check_command "$CONTAINER_ENGINE"; then
+  echo -e "missing $(bold "$CONTAINER_ENGINE")$docker_error_msg"
   exit 1
 fi
 
-set_docker_compose
-if [ -z "$DOCKER_COMPOSE_CMD" ]; then
-  echo -e "missing $(bold 'docker compose') (or $(bold 'docker-compose'))$docker_error_msg 2>&1" >&2
+set_compose_cmd
+if [ -z "$COMPOSE_CMD" ]; then
+  echo -e "missing $(bold "$CONTAINER_ENGINE compose") (or $(bold "${CONTAINER_ENGINE}-compose"))$docker_error_msg 2>&1" >&2
   exit 1
 fi
 
@@ -245,42 +260,32 @@ if ! check_command jq 2>&1; then
   exit 1
 fi
 
-if ! check_command nk 2>&1; then
-  echo -e "missing $(bold nk); install with $(bold 'go install github.com/nats-io/nkeys/nk@latest') or see $(link 'https://github.com/nats-io/nkeys' 'https://github.com/nats-io/nkeys')" >&2
-  exit 1
-fi
-
-if ! check_command podman 2>&1; then
-  echo -e "missing $(bold podman) (required by Nex to run workloads); install at $(link 'https://podman.io/docs/installation' 'https://podman.io/docs/installation')" >&2
-  exit 1
-fi
-
 # === Prerequisites ===
 # Make sure we have permission to pull from the container registry
-docker pull registry.synadia.io/control-plane:latest \
-  || (echo -e "\nMake sure to run $(bold 'docker login registry.synadia.io')\n\nIf you do not have credentials for the container registry, $(link 'https://synadia.com/platform/trial' 'sign up here')." && exit 1)
+$CONTAINER_ENGINE pull registry.synadia.io/control-plane:latest \
+  || (echo -e "\nMake sure to run $(bold "$CONTAINER_ENGINE login registry.synadia.io")\n\nIf you do not have credentials for the container registry, $(link 'https://synadia.com/platform/trial' 'sign up here')." && exit 1)
 
 # === Start Control Plane ===
 docker_cleanup() {
-  $DOCKER_COMPOSE_CMD down --volumes
+  $COMPOSE_CMD down --volumes
   exit 0
 }
 
 print_control_plane_errors() {
   rv=$?
   if [ "$rv" -ne 0 ]; then
-    $DOCKER_COMPOSE_CMD logs control-plane | grep '\[ERROR\]'
+    $COMPOSE_CMD logs control-plane | grep '\[ERROR\]'
   fi
   exit "$rv"
 }
 
-CONTAINER_RUNNING_COUNT=$($DOCKER_COMPOSE_CMD ps --status running --format json)
+CONTAINER_RUNNING_COUNT=$($COMPOSE_CMD ps --status running --format json)
 if [ -n "$CONTAINER_RUNNING_COUNT" ]; then
   red 'platform-trial is already running, exiting.' >&2
   exit 1
 fi
 
-# Stop docker compose on interrupt
+# Stop the compose stack on interrupt
 if [ -z "$detach" ]; then
   trap docker_cleanup SIGINT
 fi
@@ -288,9 +293,9 @@ fi
 # Print errors from control-plane container if non-zero exit
 trap print_control_plane_errors EXIT
 
-$DOCKER_COMPOSE_CMD up --detach control-plane
+$COMPOSE_CMD up --detach control-plane
 echo 'Waiting for control-plane to be ready...'
-grep --quiet 'control plane started' <($DOCKER_COMPOSE_CMD logs --follow control-plane)
+grep --quiet 'control plane started' <($COMPOSE_CMD logs --follow control-plane)
 echo 'control-plane is ready.'
 
 # Wait until control-plane succesfully starts before (over)writing .env file
@@ -368,7 +373,7 @@ echo "$NATS_CONF" > shared.conf
 request PATCH "/systems/$SYSTEM_ID/?test_connection=false" --data '{"connection_type":"Direct"}' >/dev/null
 
 # === Start the NATS cluster ===
-$DOCKER_COMPOSE_CMD up --detach --wait nats1 nats2 nats3
+$COMPOSE_CMD up --detach --wait nats1 nats2 nats3
 
 # === Test the NATS connection ===
 request PATCH "/systems/$SYSTEM_ID/?test_connection=true" \
@@ -448,40 +453,75 @@ request PATCH "/systems/$SYSTEM_ID/platform-components/" \
 EOF
 )" >/dev/null
 
-$DOCKER_COMPOSE_CMD up --detach --wait http-gateway
+$COMPOSE_CMD up --detach --wait http-gateway
 
 HTTP_GATEWAY_TOKEN=$(request POST "/nats-users/${HTTP_GATEWAY_NATS_USER_ID}/http-gw-token" | jq --raw-output .token)
 echo "HTTP_GATEWAY_TOKEN=\"${HTTP_GATEWAY_TOKEN}\"" >> .env
 bold '\nSaved HTTP_GATEWAY_TOKEN to .env\n'
 
-# === Setup Nex ===
+# === Setup Nex (optional) ===
+# Nex is optional: the Control Plane trial works fine without it. It is skipped
+# when its prerequisites (podman to run workloads, nk to generate a node seed)
+# are missing, and otherwise the user is asked unless --nex was passed.
+start_nex() {
+  # Prerequisites — skip with a note rather than failing the whole trial
+  if ! check_command podman; then
+    bold '\nSkipping Nex: podman not found (Nex needs it to run workloads).'
+    bold "Install podman ($(link 'https://podman.io/docs/installation' 'https://podman.io/docs/installation')) and re-run with $(bold '--nex') to enable it.\n"
+    return 0
+  fi
+  if ! check_command nk; then
+    bold '\nSkipping Nex: nk not found (Nex needs it to generate a node seed).'
+    bold "Install nk with $(bold 'go install github.com/nats-io/nkeys/nk@latest') and re-run with $(bold '--nex') to enable it.\n"
+    return 0
+  fi
 
-# Generate a unique node seed for this Nex node
-NEX_NODE_SEED=$(nk -gen server)
+  # Decide whether to run: --nex forces it, otherwise prompt on an interactive
+  # terminal, and skip by default when there's no TTY (e.g. CI).
+  if [ -z "$nex" ]; then
+    if [ -t 0 ]; then
+      printf 'Do you want to start a Nex node? [y/N] '
+      read -r reply
+      case "$reply" in
+        [Yy]*) ;;
+        *) bold '\nSkipping Nex.\n'; return 0 ;;
+      esac
+    else
+      bold '\nSkipping Nex (no interactive terminal; pass --nex to enable).\n'
+      return 0
+    fi
+  fi
 
-# Enable the workloads and catalog platform components and mint their tokens
-NEX_PLATFORM_TOKEN=$(get_platform_component_token "$SYSTEM_ID" workloads)
-NEX_CATALOG_TOKEN=$(get_platform_component_token "$SYSTEM_ID" catalog)
+  # Detect the host Podman socket so the Nex container can run workloads
+  PODMAN_SOCK=$(detect_podman_socket)
+  if [ -z "$PODMAN_SOCK" ]; then
+    bold '\nSkipping Nex: could not detect a running Podman socket. Is Podman running? (macOS: `podman machine start`)\n'
+    return 0
+  fi
+  export PODMAN_SOCK
+  bold "\nUsing Podman socket: ${PODMAN_SOCK}\n"
 
-# Render the real config from the template (jq overwrites the placeholders)
-jq \
-  --arg node_seed "$NEX_NODE_SEED" \
-  --arg platform_token "$NEX_PLATFORM_TOKEN" \
-  --arg catalog_token "$NEX_CATALOG_TOKEN" \
-  '.node_seed = $node_seed | .platform.token = $platform_token | .catalog.token = $catalog_token' \
-  nex-ce.config.json.template > nex-ce.config.json
-bold '\nRendered nex-ce.config.json from nex-ce.config.json.template\n'
+  # Generate a unique node seed for this Nex node
+  NEX_NODE_SEED=$(nk -gen server)
 
-# Detect the host Podman socket so the Nex container can run workloads
-PODMAN_SOCK=$(detect_podman_socket)
-if [ -z "$PODMAN_SOCK" ]; then
-  red 'Failed to detect a Podman socket. Is Podman running? (macOS: `podman machine start`)' >&2
-  exit 1
-fi
-export PODMAN_SOCK
-bold "\nUsing Podman socket: ${PODMAN_SOCK}\n"
+  # Enable the workloads and catalog platform components and mint their tokens
+  NEX_PLATFORM_TOKEN=$(get_platform_component_token "$SYSTEM_ID" workloads)
+  NEX_CATALOG_TOKEN=$(get_platform_component_token "$SYSTEM_ID" catalog)
 
-$DOCKER_COMPOSE_CMD up --detach --wait nex
+  # Render the real config from the template (jq overwrites the placeholders)
+  jq \
+    --arg node_seed "$NEX_NODE_SEED" \
+    --arg platform_token "$NEX_PLATFORM_TOKEN" \
+    --arg catalog_token "$NEX_CATALOG_TOKEN" \
+    '.node_seed = $node_seed | .platform.token = $platform_token | .catalog.token = $catalog_token' \
+    nex-ce.config.json.template > nex-ce.config.json
+  bold '\nRendered nex-ce.config.json from nex-ce.config.json.template\n'
+
+  $COMPOSE_CMD up --detach --wait nex
+  bold '\nNex node started.\n'
+}
+
+start_nex
 
 cat <<EOF
 Done bootstrapping Synadia Platform, open the UI at $(link 'http://localhost:8080') and login with:

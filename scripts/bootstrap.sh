@@ -10,6 +10,9 @@ declare debug=
 declare interactive=
 declare password_stdin=
 declare branch=main
+declare engine='docker'
+# Flags forwarded as-is to start.sh
+declare -a start_args=()
 
 usage(){
 >&2 cat <<EOF
@@ -29,8 +32,14 @@ Bootstrap the Synadia Platform trial
   -i, --interactive
     Prompt for Synadia container registry credentials interactively
 
+  -n, --nex
+    Start the Nex node (forwarded to start.sh)
+
   -p, --password-stdin
     Read the Synadia container registry password from stdin
+
+  -P, --podman
+    Run the whole stack with podman instead of docker (forwarded to start.sh)
 EOF
 exit 1
 }
@@ -43,7 +52,9 @@ for arg; do
     --debug)           args+=( -e );;
     --help)            args+=( -h );;
     --interactive)     args+=( -i );;
+    --nex)             args+=( -n );;
     --password-stdin)  args+=( -p );;
+    --podman)          args+=( -P );;
     *)                 args+=( "$arg" );;
   esac
 done
@@ -52,13 +63,15 @@ done
 set -- "${args[@]+"${args[@]}"}"
 
 # Handle args
-while getopts 'b:ehip' opt; do
+while getopts 'b:ehinpP' opt; do
   case $opt in
     b) branch="$OPTARG" ;;
     e) debug=1 ;;
     h) usage ;;
     i) interactive=1 ;;
+    n) start_args+=( --nex ) ;;
     p) password_stdin=1 ;;
+    P) engine='podman'; start_args+=( --podman ) ;;
     *)
       >&2 echo "Unsupported option: $1"
       usage ;;
@@ -105,8 +118,8 @@ elif [ -z "$SYNADIA_CR_PASSWORD" ]; then
   exit 1
 fi
 
-echo "$SYNADIA_CR_PASSWORD" | docker login --username "${SYNADIA_CR_USERNAME}" --password-stdin "$SYNADIA_CR_SERVER"
+echo "$SYNADIA_CR_PASSWORD" | "$engine" login --username "${SYNADIA_CR_USERNAME}" --password-stdin "$SYNADIA_CR_SERVER"
 
 cd ./scripts
 chmod u+x ./start.sh
-source ./start.sh
+source ./start.sh "${start_args[@]+"${start_args[@]}"}"

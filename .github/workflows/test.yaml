@@ -6,36 +6,76 @@ on:
 
 jobs:
   test:
-    name: Test Scripts
+    name: Test Scripts (${{ matrix.engine }}${{ matrix.nex && ', nex' || '' }})
     timeout-minutes: 15
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [docker, podman]
+        nex: [false, true]
+    env:
+      BRANCH: ${{ github.head_ref || github.ref_name }}
+      ENGINE: ${{ matrix.engine }}
+      NEX: ${{ matrix.nex }}
     steps:
+      # Nex generates its node seed with `nk`
+      - name: Install nk
+        if: matrix.nex
+        shell: bash
+        run: |
+          go install github.com/nats-io/nkeys/nk@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      # `podman compose` needs a compose provider on the runner
+      - name: Install podman-compose
+        if: matrix.engine == 'podman'
+        shell: bash
+        run: |
+          pipx install podman-compose
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
       - name: Test bootstrap.sh
         env:
           SYNADIA_CR_USERNAME: ${{ secrets.SYNADIA_CR_USERNAME }}
           SYNADIA_CR_PASSWORD: ${{ secrets.SYNADIA_CR_PASSWORD }}
         shell: bash
-        run: curl -fsSL "https://raw.githubusercontent.com/synadia-io/platform-trial/refs/heads/${{ github.head_ref || github.ref_name }}/scripts/bootstrap.sh" | bash -s -- --branch "${{ github.head_ref || github.ref_name }}"
-      
+        run: |
+          # Nex (any engine) and the podman engine need the rootless podman
+          # socket running; start it in the background for this job.
+          if [ "$NEX" = "true" ] || [ "$ENGINE" = "podman" ]; then
+            podman system service --time=0 &
+            for _ in $(seq 1 10); do podman info >/dev/null 2>&1 && break; sleep 1; done
+          fi
+
+          args=(--branch "$BRANCH")
+          [ "$ENGINE" = "podman" ] && args+=(--podman)
+          [ "$NEX" = "true" ] && args+=(--nex)
+
+          curl -fsSL "https://raw.githubusercontent.com/synadia-io/platform-trial/refs/heads/${BRANCH}/scripts/bootstrap.sh" \
+            | bash -s -- "${args[@]}"
+
       - name: Test
         shell: bash
         working-directory: platform-trial
         run: ./scripts/test.sh
-      
+
       - name: Stop
         shell: bash
         working-directory: platform-trial
-        run: ./scripts/stop.sh
-      
+        run: ./scripts/stop.sh ${{ matrix.engine == 'podman' && '--podman' || '' }}
+
       - name: Debug
         if: failure()
+        working-directory: platform-trial
+        shell: bash
         run: |
-          cd ./platform-trial
-          echo '.env:'
-          cat .env
-          echo '\nshared.conf:'
-          cat shared.conf
-          echo '\ntrial.creds:'
-          cat trial.creds
-          echo '\nhttp-gateway.creds:'
-          cat http-gateway.creds
+          set +e
+          echo '.env:'; cat .env
+          echo; echo 'shared.conf:'; cat shared.conf
+          echo; echo 'trial.creds:'; cat trial.creds
+          echo; echo 'http-gateway.creds:'; cat http-gateway.creds
+          if [ "$NEX" = "true" ]; then
+            echo; echo 'nex-ce.config.json:'; cat nex-ce.config.json
+            echo; echo 'nex logs:'; ${ENGINE} compose logs nex
+          fi
