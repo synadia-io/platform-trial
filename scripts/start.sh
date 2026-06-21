@@ -272,7 +272,7 @@ SYSTEM_RESPONSE=$(request POST "/teams/${TEAM_ID}/systems" \
   --data "$(cat <<EOF | jq --compact-output
 {
   "name": "trial",
-  "url": "nats://nats1:4222,nats://nats2:4222,nats://nats3:4222",
+  "url": "nats://host.docker.internal:4222,nats://host.docker.internal:4223,nats://host.docker.internal:42224,
   "jetstream_enabled": true
 }
 EOF
