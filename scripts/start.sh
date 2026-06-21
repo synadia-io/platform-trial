@@ -134,6 +134,43 @@ retry_with_backoff() {
   set -e
 }
 
+# Detect the host Podman socket path in an OS-agnostic way. On macOS the socket
+# is exposed by `podman machine`; on Linux it is the native (rootless or
+# rootful) service socket.
+detect_podman_socket() {
+  case "$(uname -s)" in
+    Darwin)
+      podman machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}' 2>/dev/null | head -n1
+      ;;
+    *)
+      podman info --format '{{.Host.RemoteSocket.Path}}' 2>/dev/null | head -n1
+      ;;
+  esac
+}
+
+# Enable a platform component on the system and return its `pcm_` token. The flow
+# is: enable the component, re-read the system to find the component ID, then
+# fetch the component token.
+#   $1 = system ID, $2 = component type (e.g. "workloads", "catalog")
+get_platform_component_token() {
+  local system_id="$1"
+  local component_type="$2"
+
+  request PATCH "/systems/${system_id}/platform-components/" \
+    --data "$(jq --compact-output --null-input --arg type "$component_type" '{type: $type, enabled: true}')" >/dev/null
+
+  local component_id
+  component_id=$(request GET "/systems/${system_id}" \
+    | jq --raw-output --arg type "$component_type" '.platform_components.components[] | select(.type == $type) | .id')
+
+  if [ -z "$component_id" ] || [ "$component_id" = 'null' ]; then
+    red "Failed to find ${component_type} platform component ID for system ${system_id}" >&2
+    exit 1
+  fi
+
+  request GET "/systems/${system_id}/platform-components/${component_id}/tokens" | jq --raw-output .token
+}
+
 # Use `docker compose`, falling back to `docker-compose` if not available
 declare DOCKER_COMPOSE_CMD=
 set_docker_compose() {
@@ -208,6 +245,16 @@ if ! check_command jq 2>&1; then
   exit 1
 fi
 
+if ! check_command nk 2>&1; then
+  echo -e "missing $(bold nk); install with $(bold 'go install github.com/nats-io/nkeys/nk@latest') or see $(link 'https://github.com/nats-io/nkeys' 'https://github.com/nats-io/nkeys')" >&2
+  exit 1
+fi
+
+if ! check_command podman 2>&1; then
+  echo -e "missing $(bold podman) (required by Nex to run workloads); install at $(link 'https://podman.io/docs/installation' 'https://podman.io/docs/installation')" >&2
+  exit 1
+fi
+
 # === Prerequisites ===
 # Make sure we have permission to pull from the container registry
 docker pull registry.synadia.io/control-plane:latest \
@@ -272,7 +319,7 @@ SYSTEM_RESPONSE=$(request POST "/teams/${TEAM_ID}/systems" \
   --data "$(cat <<EOF | jq --compact-output
 {
   "name": "trial",
-  "url": "nats://host.docker.internal:4222,nats://host.docker.internal:4223,nats://host.docker.internal:42224,
+  "url": "nats://host.docker.internal:4222,nats://host.docker.internal:4223,nats://host.docker.internal:4224",
   "jetstream_enabled": true
 }
 EOF
@@ -406,6 +453,35 @@ $DOCKER_COMPOSE_CMD up --detach --wait http-gateway
 HTTP_GATEWAY_TOKEN=$(request POST "/nats-users/${HTTP_GATEWAY_NATS_USER_ID}/http-gw-token" | jq --raw-output .token)
 echo "HTTP_GATEWAY_TOKEN=\"${HTTP_GATEWAY_TOKEN}\"" >> .env
 bold '\nSaved HTTP_GATEWAY_TOKEN to .env\n'
+
+# === Setup Nex ===
+
+# Generate a unique node seed for this Nex node
+NEX_NODE_SEED=$(nk -gen server)
+
+# Enable the workloads and catalog platform components and mint their tokens
+NEX_PLATFORM_TOKEN=$(get_platform_component_token "$SYSTEM_ID" workloads)
+NEX_CATALOG_TOKEN=$(get_platform_component_token "$SYSTEM_ID" catalog)
+
+# Render the real config from the template (jq overwrites the placeholders)
+jq \
+  --arg node_seed "$NEX_NODE_SEED" \
+  --arg platform_token "$NEX_PLATFORM_TOKEN" \
+  --arg catalog_token "$NEX_CATALOG_TOKEN" \
+  '.node_seed = $node_seed | .platform.token = $platform_token | .catalog.token = $catalog_token' \
+  nex-ce.config.json.template > nex-ce.config.json
+bold '\nRendered nex-ce.config.json from nex-ce.config.json.template\n'
+
+# Detect the host Podman socket so the Nex container can run workloads
+PODMAN_SOCK=$(detect_podman_socket)
+if [ -z "$PODMAN_SOCK" ]; then
+  red 'Failed to detect a Podman socket. Is Podman running? (macOS: `podman machine start`)' >&2
+  exit 1
+fi
+export PODMAN_SOCK
+bold "\nUsing Podman socket: ${PODMAN_SOCK}\n"
+
+$DOCKER_COMPOSE_CMD up --detach --wait nex
 
 cat <<EOF
 Done bootstrapping Synadia Platform, open the UI at $(link 'http://localhost:8080') and login with:

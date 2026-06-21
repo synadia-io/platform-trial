@@ -2,3 +2,5 @@
 .env
 shared.conf
 /data
+# Rendered from nex-ce.config.json.template by scripts/start.sh; contains secrets
+nex-ce.config.json

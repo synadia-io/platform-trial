@@ -58,6 +58,27 @@ services:
       - nats2
       - nats3
 
+  nex:
+    image: registry.synadia.io/nex-ce:latest
+    command: ["node", "up"]
+    environment:
+      # Seed the embedded connector catalog
+      YES_SEED: "1"
+    volumes:
+      - ./nex-ce.config.json:/etc/nex-ce/config.json
+      # Host Podman socket bound into the container so Nex can run workloads.
+      # PODMAN_SOCK is detected per-OS and exported by scripts/start.sh:
+      #   Linux:  podman info --format '{{.Host.RemoteSocket.Path}}'
+      #   macOS:  podman machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}'
+      # The default below is the common Linux rootless path for running
+      # `docker compose` directly without start.sh.
+      - ${PODMAN_SOCK:-/run/user/1000/podman/podman.sock}:/podman.sock
+    depends_on:
+      - control-plane
+      - nats1
+      - nats2
+      - nats3
+
 volumes:
   cp-data: {}
   nats1-data: {}
