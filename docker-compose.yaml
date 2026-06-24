@@ -59,7 +59,7 @@ services:
       - nats3
 
   nex:
-    image: registry.synadia.io/nex-ce:latest
+    image: registry.synadia.io/nexce:trial
     command: ["node", "up"]
     environment:
       # Seed the embedded connector catalog
