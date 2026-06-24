@@ -20,6 +20,7 @@
   },
   "catalog": {
     "enabled": true,
+    "id": "${NEX_CATALOG_ID}",
     "token": "${NEX_CATALOG_TOKEN}"
   }
 }

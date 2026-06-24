@@ -103,6 +103,11 @@ generate_password() {
   fi
 }
 
+# generate a NUID (https://github.com/nats-io/nuid): 22 base62 characters
+generate_nuid() {
+  LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom 2>/dev/null | head -c 22 || true
+}
+
 # find control-plane container errors
 find_errors() {
   $COMPOSE_CMD logs control-plane | grep -C1 '\[ERROR\]'
@@ -166,12 +171,21 @@ detect_podman_socket() {
 # is: enable the component, re-read the system to find the component ID, then
 # fetch the component token.
 #   $1 = system ID, $2 = component type (e.g. "workloads", "catalog")
+#   $3 = optional component config as a JSON object (e.g. {"catalog_id":"..."})
 get_platform_component_token() {
   local system_id="$1"
   local component_type="$2"
+  local config="${3-}"
 
-  request PATCH "/systems/${system_id}/platform-components/" \
-    --data "$(jq --compact-output --null-input --arg type "$component_type" '{type: $type, enabled: true}')" >/dev/null
+  local body
+  if [ -n "$config" ]; then
+    body=$(jq --compact-output --null-input --arg type "$component_type" --argjson config "$config" \
+      '{type: $type, enabled: true, config: $config}')
+  else
+    body=$(jq --compact-output --null-input --arg type "$component_type" '{type: $type, enabled: true}')
+  fi
+
+  request PATCH "/systems/${system_id}/platform-components/" --data "$body" >/dev/null
 
   local component_id
   component_id=$(request GET "/systems/${system_id}" \
@@ -501,27 +515,34 @@ start_nex() {
   export PODMAN_SOCK
   bold "\nUsing Podman socket: ${PODMAN_SOCK}\n"
 
+  # Enable workloads and connectors on the trial account so Nex can run them
+  request PATCH "/accounts/${ACCOUNT_ID}/" \
+    --data '{"connectors": true, "workloads": true}' >/dev/null
+  bold '\nEnabled workloads and connectors on the trial account\n'
+
   # Generate a unique node seed for this Nex node
   NEX_NODE_SEED=$(nk -gen server)
 
-  # Enable the workloads and catalog platform components and mint their tokens
+  # Enable the workloads and catalog platform components and mint their tokens.
+  # The catalog component requires a NUID catalog_id in its config.
   NEX_PLATFORM_TOKEN=$(get_platform_component_token "$SYSTEM_ID" workloads)
-  NEX_CATALOG_TOKEN=$(get_platform_component_token "$SYSTEM_ID" catalog)
+  NEX_CATALOG_ID=$(generate_nuid)
+  NEX_CATALOG_TOKEN=$(get_platform_component_token "$SYSTEM_ID" catalog \
+    "$(jq --compact-output --null-input --arg id "$NEX_CATALOG_ID" '{catalog_id: $id}')")
 
   # Render the real config from the template (jq overwrites the placeholders)
   jq \
     --arg node_seed "$NEX_NODE_SEED" \
     --arg platform_token "$NEX_PLATFORM_TOKEN" \
+    --arg catalog_id "$NEX_CATALOG_ID" \
     --arg catalog_token "$NEX_CATALOG_TOKEN" \
-    '.node_seed = $node_seed | .platform.token = $platform_token | .catalog.token = $catalog_token' \
+    '.node_seed = $node_seed | .platform.token = $platform_token | .catalog.id = $catalog_id | .catalog.token = $catalog_token' \
     nex-ce.config.json.template > nex-ce.config.json
   bold '\nRendered nex-ce.config.json from nex-ce.config.json.template\n'
 
   $COMPOSE_CMD up --detach --wait nex
   bold '\nNex node started.\n'
 }
-
-start_nex
 
 cat <<EOF
 Done bootstrapping Synadia Platform, open the UI at $(link 'http://localhost:8080') and login with:
@@ -531,6 +552,9 @@ Done bootstrapping Synadia Platform, open the UI at $(link 'http://localhost:808
 
 Check out the HTTP Gateway API documentation at $(link 'http://localhost:8081/api/')
 EOF
+
+# Ask about / start Nex only after the Control Plane and HTTP Gateway are ready
+start_nex
 
 # if --open, open the browser to control plane
 if [ -n "$open" ]; then
