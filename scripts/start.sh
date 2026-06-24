@@ -67,6 +67,10 @@ done
 # handle empty array
 set -- "${args[@]+"${args[@]}"}"
 
+# Reset OPTIND: bootstrap.sh sources this script in its own shell after running
+# its own getopts loop, so OPTIND is stale here and would skip our flags.
+OPTIND=1
+
 # Handle args
 while getopts 'hcdenop' opt; do
   case $opt in
