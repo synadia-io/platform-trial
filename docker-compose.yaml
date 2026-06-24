@@ -2,6 +2,8 @@ services:
   control-plane:
     image: registry.synadia.io/control-plane:latest
     command: ["server", "start"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./syn-cp.yaml:/app/syn-cp.yaml
       - cp-data:/app/data
@@ -61,6 +63,8 @@ services:
   nex:
     image: registry.synadia.io/nexce:trial
     command: ["node", "up"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       # Seed the embedded connector catalog
       YES_SEED: "1"
