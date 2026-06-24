@@ -474,24 +474,9 @@ echo "HTTP_GATEWAY_TOKEN=\"${HTTP_GATEWAY_TOKEN}\"" >> .env
 bold '\nSaved HTTP_GATEWAY_TOKEN to .env\n'
 
 # === Setup Nex (optional) ===
-# Nex is optional: the Control Plane trial works fine without it. It is skipped
-# when its prerequisites (podman to run workloads, nk to generate a node seed)
-# are missing, and otherwise the user is asked unless --nex was passed.
+# Nex is optional: it is skipped when its prerequisites (podman, nk) are missing,
+# and otherwise the user is asked unless --nex was passed.
 start_nex() {
-  # Prerequisites — skip with a note rather than failing the whole trial
-  if ! check_command podman; then
-    bold '\nSkipping Nex: podman not found (Nex needs it to run workloads).'
-    bold "Install podman ($(link 'https://podman.io/docs/installation' 'https://podman.io/docs/installation')) and re-run with $(bold '--nex') to enable it.\n"
-    return 0
-  fi
-  if ! check_command nk; then
-    bold '\nSkipping Nex: nk not found (Nex needs it to generate a node seed).'
-    bold "Install nk with $(bold 'go install github.com/nats-io/nkeys/nk@latest') and re-run with $(bold '--nex') to enable it.\n"
-    return 0
-  fi
-
-  # Decide whether to run: --nex forces it, otherwise prompt on an interactive
-  # terminal, and skip by default when there's no TTY (e.g. CI).
   if [ -z "$nex" ]; then
     if [ -t 0 ]; then
       printf 'Do you want to start a Nex node? [y/N] '
@@ -504,6 +489,18 @@ start_nex() {
       bold '\nSkipping Nex (no interactive terminal; pass --nex to enable).\n'
       return 0
     fi
+  fi
+
+  # Prerequisites - skip with a note rather than failing the whole trial
+  if ! check_command podman; then
+    bold '\nSkipping Nex: podman not found (Nex needs it to run workloads).'
+    bold "Install podman ($(link 'https://podman.io/docs/installation' 'https://podman.io/docs/installation')) and re-run with $(bold '--nex') to enable it.\n"
+    return 0
+  fi
+  if ! check_command nk; then
+    bold '\nSkipping Nex: nk not found (Nex needs it to generate a node seed).'
+    bold "Install nk with $(bold 'go install github.com/nats-io/nkeys/nk@latest') and re-run with $(bold '--nex') to enable it.\n"
+    return 0
   fi
 
   # Detect the host Podman socket so the Nex container can run workloads
