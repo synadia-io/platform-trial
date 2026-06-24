@@ -122,4 +122,4 @@ echo "$SYNADIA_CR_PASSWORD" | "$engine" login --username "${SYNADIA_CR_USERNAME}
 
 cd ./scripts
 chmod u+x ./start.sh
-source ./start.sh "${start_args[@]+"${start_args[@]}"}"
+./start.sh "${start_args[@]+"${start_args[@]}"}"
