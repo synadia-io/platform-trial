@@ -19,6 +19,12 @@ services:
       - ./nats1.conf:/etc/nats/nats-server.conf
       - ./shared.conf:/etc/nats/shared.conf
       - nats1-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
 
   nats2:
     image: docker.io/nats:alpine
@@ -29,6 +35,12 @@ services:
       - ./nats2.conf:/etc/nats/nats-server.conf
       - ./shared.conf:/etc/nats/shared.conf
       - nats2-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
 
   nats3:
     image: docker.io/nats:alpine
@@ -39,6 +51,12 @@ services:
       - ./nats3.conf:/etc/nats/nats-server.conf
       - ./shared.conf:/etc/nats/shared.conf
       - nats3-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
 
   http-gateway:
     image: registry.synadia.io/http-gateway:latest
@@ -55,10 +73,14 @@ services:
     volumes:
       - ./http-gateway.creds:/http-gateway.creds
     depends_on:
-      - control-plane
-      - nats1
-      - nats2
-      - nats3
+      control-plane:
+        condition: service_started
+      nats1:
+        condition: service_healthy
+      nats2:
+        condition: service_healthy
+      nats3:
+        condition: service_healthy
 
   nex:
     image: registry.synadia.io/nexce:trial
@@ -78,10 +100,14 @@ services:
       # `docker compose` directly without start.sh.
       - ${PODMAN_SOCK:-/run/user/1000/podman/podman.sock}:/podman.sock
     depends_on:
-      - control-plane
-      - nats1
-      - nats2
-      - nats3
+      control-plane:
+        condition: service_started
+      nats1:
+        condition: service_healthy
+      nats2:
+        condition: service_healthy
+      nats3:
+        condition: service_healthy
 
 volumes:
   cp-data: {}
