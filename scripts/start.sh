@@ -516,11 +516,6 @@ start_nex() {
   export PODMAN_SOCK
   bold "\nUsing Podman socket: ${PODMAN_SOCK}\n"
 
-  # Enable workloads and connectors on the trial account so Nex can run them
-  request PATCH "/accounts/${ACCOUNT_ID}/" \
-    --data '{"connectors": true, "workloads": true}' >/dev/null
-  bold '\nEnabled workloads and connectors on the trial account\n'
-
   # Generate a unique node seed for this Nex node
   NEX_NODE_SEED=$(nk -gen server)
 
@@ -530,6 +525,11 @@ start_nex() {
   NEX_CATALOG_ID=$(generate_nuid)
   NEX_CATALOG_TOKEN=$(get_platform_component_token "$SYSTEM_ID" catalog \
     "$(jq --compact-output --null-input --arg id "$NEX_CATALOG_ID" '{catalog_id: $id}')")
+
+  # Enable workloads and connectors on the trial account so Nex can run them
+  request PATCH "/accounts/${ACCOUNT_ID}/" \
+    --data '{"connectors": true, "workloads": true}' >/dev/null
+  bold '\nEnabled workloads and connectors on the trial account\n'
 
   # Render the real config from the template (jq overwrites the placeholders)
   jq \
