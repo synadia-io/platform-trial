@@ -467,6 +467,10 @@ request PATCH "/systems/$SYSTEM_ID/platform-components/" \
 EOF
 )" >/dev/null
 
+# Pre-pull with the engine CLI: `<engine> compose` may delegate to a provider
+# (e.g. docker-compose) that does not share the engine's registry auth, so the
+# authenticated `<engine> pull` must fetch this private image first.
+$CONTAINER_ENGINE pull registry.synadia.io/http-gateway:latest
 $COMPOSE_CMD up --detach --wait http-gateway
 
 HTTP_GATEWAY_TOKEN=$(request POST "/nats-users/${HTTP_GATEWAY_NATS_USER_ID}/http-gw-token" | jq --raw-output .token)
@@ -537,6 +541,9 @@ start_nex() {
     nex-ce.config.json.template > nex-ce.config.json
   bold '\nRendered nex-ce.config.json from nex-ce.config.json.template\n'
 
+  # See the http-gateway pre-pull note above: fetch the private image with the
+  # authenticated engine CLI before compose brings the service up.
+  $CONTAINER_ENGINE pull registry.synadia.io/nexce:trial
   $COMPOSE_CMD up --detach --wait nex
   bold '\nNex node started.\n'
 }
