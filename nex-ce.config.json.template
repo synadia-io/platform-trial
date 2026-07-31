@@ -1,0 +1,26 @@
+{
+  "name": "nex",
+  "node_seed": "${NEX_NODE_SEED}",
+  "nexlets": {
+    "containers-podman": {
+      "enabled": true,
+      "registerType": "container",
+      "podmanSocketPath": "unix:///podman.sock"
+    },
+    "connectors-podman": {
+      "enabled": true,
+      "registerType": "connector",
+      "podmanSocketPath": "unix:///podman.sock"
+    }
+  },
+  "platform": {
+    "enabled": true,
+    "url": "http://control-plane:8080",
+    "token": "${NEX_PLATFORM_TOKEN}"
+  },
+  "catalog": {
+    "enabled": true,
+    "id": "${NEX_CATALOG_ID}",
+    "token": "${NEX_CATALOG_TOKEN}"
+  }
+}
