@@ -7,7 +7,7 @@
 
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+cd -P "$(dirname "$0")/.."
 
 # shellcheck source=./common.sh
 . ./scripts/common.sh
@@ -113,6 +113,63 @@ find_errors() {
   $COMPOSE_CMD logs control-plane | grep -C1 '\[ERROR\]'
 }
 
+# Report the state of a compose service.
+service_state() {
+  $COMPOSE_CMD ps --all --format json 2>/dev/null \
+    | grep -E '^[[:space:]]*[[{]' \
+    | jq --raw-output --slurp --arg svc "$1" \
+      '[.[] | if type == "array" then .[] else . end]
+       | map(select(.Service == $svc))
+       | (.[0].State // "") | ascii_downcase' 2>/dev/null || true
+}
+
+# Wait for the control-plane to log that it is ready.
+wait_for_control_plane() {
+  local timeout="$1"
+  local waited=0
+  local state
+
+  local logs
+  while [ "$waited" -lt "$timeout" ]; do
+    logs=$($COMPOSE_CMD logs --no-color control-plane 2>/dev/null || true)
+    case "$logs" in
+      *'control plane started'*) return 0 ;;
+    esac
+
+    state=$(service_state control-plane)
+    if [ "$state" = 'exited' ] || [ "$state" = 'dead' ]; then
+      red "\ncontrol-plane exited before it became ready. Last logs:" >&2
+      $COMPOSE_CMD logs --no-color --tail 20 control-plane >&2 || true
+      return 1
+    fi
+
+    sleep 1
+    (( waited+=1 ))
+  done
+
+  red "\ncontrol-plane was not ready after ${timeout}s. Last logs:" >&2
+  $COMPOSE_CMD logs --no-color --tail 20 control-plane >&2 || true
+  return 1
+}
+
+# Wait for the Nex node to register its podman agents.
+wait_for_nex_agents() {
+  local timeout="$1"
+  local waited=0
+  local logs
+
+  while [ "$waited" -lt "$timeout" ]; do
+    logs=$($COMPOSE_CMD logs --no-color nex 2>/dev/null || true)
+    case "$logs" in
+      *'agent registered'*) return 0 ;;
+      *'started without any agents'*) return 1 ;;
+    esac
+    sleep 1
+    (( waited+=1 ))
+  done
+  return 1
+}
+
 # Copy to the clipboard, depending on what CLI tools are available
 copy_to_clipboard() {
   # macOS
@@ -159,12 +216,42 @@ retry_with_backoff() {
 detect_podman_socket() {
   case "$(uname -s)" in
     Darwin)
-      podman machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}' 2>/dev/null | head -n1
+      podman machine ssh 'podman info --format "{{.Host.RemoteSocket.Path}}"' 2>/dev/null | tr -d '\r' | head -n1
       ;;
     *)
       podman info --format '{{.Host.RemoteSocket.Path}}' 2>/dev/null | head -n1
       ;;
   esac
+}
+
+# Copy the host registry login into the Podman VM (macOS only) so Nex can pull container images.
+copy_registry_auth_to_podman_vm() {
+  [ "$(uname -s)" = Darwin ] || return 0
+
+  local host_auth
+  for candidate in "${HOME}/.config/containers/auth.json" "${HOME}/.docker/config.json"; do
+    if [ -s "$candidate" ]; then
+      host_auth="$candidate"
+      break
+    fi
+  done
+
+  if [ -z "${host_auth-}" ]; then
+    bold "\nNo host registry auth file found; Nex may fail to pull workload images."
+    bold "Run $(bold "$CONTAINER_ENGINE login registry.synadia.io") and re-run.\n"
+    return 0
+  fi
+
+  # Pipe the file in over stdin so the credentials never land in a command line
+  # or an environment variable.
+  if podman machine ssh 'mkdir -p ${XDG_RUNTIME_DIR}/containers &&
+      cat > ${XDG_RUNTIME_DIR}/containers/auth.json &&
+      chmod 600 ${XDG_RUNTIME_DIR}/containers/auth.json' < "$host_auth" 2>/dev/null; then
+    bold "\nCopied registry credentials into the Podman VM\n"
+  else
+    bold "\nCould not copy registry credentials into the Podman VM;"
+    bold "Nex may fail to pull workload images.\n"
+  fi
 }
 
 # Enable a platform component on the system and return its `pcm_` token. The flow
@@ -215,6 +302,8 @@ set_compose_cmd() {
 # === Common vars ===
 export DOCKER_CLI_HINTS=false
 
+# Seconds to wait for the control-plane to become ready before giving up
+declare -r CONTROL_PLANE_TIMEOUT="${CONTROL_PLANE_TIMEOUT:-120}"
 declare -r BASE_URL='localhost:8080/api/core/beta'
 declare -r ADMIN_USERNAME=admin
 # shellcheck disable=SC2155
@@ -288,7 +377,14 @@ docker_cleanup() {
 print_control_plane_errors() {
   rv=$?
   if [ "$rv" -ne 0 ]; then
-    $COMPOSE_CMD logs control-plane | grep '\[ERROR\]'
+    local logs errors
+    logs=$($COMPOSE_CMD logs --no-color control-plane 2>/dev/null || true)
+    errors=$(printf '%s\n' "$logs" | grep '\[ERROR\]' || true)
+    if [ -n "$errors" ]; then
+      printf '%s\n' "$errors" >&2
+    else
+      printf '%s\n' "$logs" | tail -20 >&2
+    fi
   fi
   exit "$rv"
 }
@@ -309,7 +405,7 @@ trap print_control_plane_errors EXIT
 
 $COMPOSE_CMD up --detach control-plane
 echo 'Waiting for control-plane to be ready...'
-grep --quiet 'control plane started' <($COMPOSE_CMD logs --follow control-plane)
+wait_for_control_plane "$CONTROL_PLANE_TIMEOUT"
 echo 'control-plane is ready.'
 
 # Wait until control-plane succesfully starts before (over)writing .env file
@@ -516,6 +612,8 @@ start_nex() {
   export PODMAN_SOCK
   bold "\nUsing Podman socket: ${PODMAN_SOCK}\n"
 
+  copy_registry_auth_to_podman_vm
+
   # Generate a unique node seed for this Nex node
   NEX_NODE_SEED=$(nk -gen server)
 
@@ -531,6 +629,14 @@ start_nex() {
     --data '{"connectors": true, "workloads": true}' >/dev/null
   bold '\nEnabled workloads and connectors on the trial account\n'
 
+  createNexusStateBucket() {
+    request POST "/accounts/${ACCOUNT_ID}/jetstream/kv-buckets/" \
+      --data '{"bucket":"nexus01-state"}' >/dev/null
+  }
+  retry_with_backoff createNexusStateBucket \
+    || (rt=$?; red 'Failed to create the Nex state KV bucket' >&2; exit $rt)
+  bold '\nJetStream is ready for the trial account\n'
+
   # Render the real config from the template (jq overwrites the placeholders)
   jq \
     --arg node_seed "$NEX_NODE_SEED" \
@@ -545,6 +651,19 @@ start_nex() {
   # authenticated engine CLI before compose brings the service up.
   $CONTAINER_ENGINE pull registry.synadia.io/nexce:trial
   $COMPOSE_CMD up --detach --wait nex
+
+  local attempt=1
+  while ! wait_for_nex_agents 30; do
+    if [ "$attempt" -ge 3 ]; then
+      red 'Nex node started without any agents' >&2
+      red 'Run `'"$COMPOSE_CMD"' up --detach --force-recreate nex` to retry.' >&2
+      return 1
+    fi
+    bold "\nNex started without agents, retrying (${attempt}/2)...\n"
+    sleep 10
+    $COMPOSE_CMD up --detach --force-recreate nex
+    (( attempt+=1 ))
+  done
   bold '\nNex node started.\n'
 }
 

@@ -1,11 +1,11 @@
 services:
   control-plane:
-    image: registry.synadia.io/control-plane:latest
+    image: registry.synadia.io/control-plane:1.15.0-rc.0
     command: ["server", "start"]
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ./syn-cp.yaml:/app/syn-cp.yaml
+      - ./syn-cp.yaml:/app/syn-cp.yaml:ro
       - cp-data:/app/data
     ports:
       - 8080:8080
@@ -16,8 +16,8 @@ services:
       - 4222:4222
       - 8222:8222
     volumes:
-      - ./nats1.conf:/etc/nats/nats-server.conf
-      - ./shared.conf:/etc/nats/shared.conf
+      - ./nats1.conf:/etc/nats/nats-server.conf:ro
+      - ./shared.conf:/etc/nats/shared.conf:ro
       - nats1-data:/data
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
@@ -32,8 +32,8 @@ services:
       - 4223:4222
       - 8223:8222
     volumes:
-      - ./nats2.conf:/etc/nats/nats-server.conf
-      - ./shared.conf:/etc/nats/shared.conf
+      - ./nats2.conf:/etc/nats/nats-server.conf:ro
+      - ./shared.conf:/etc/nats/shared.conf:ro
       - nats2-data:/data
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
@@ -48,8 +48,8 @@ services:
       - 4224:4222
       - 8224:8222
     volumes:
-      - ./nats3.conf:/etc/nats/nats-server.conf
-      - ./shared.conf:/etc/nats/shared.conf
+      - ./nats3.conf:/etc/nats/nats-server.conf:ro
+      - ./shared.conf:/etc/nats/shared.conf:ro
       - nats3-data:/data
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
@@ -83,22 +83,22 @@ services:
         condition: service_healthy
 
   nex:
-    image: registry.synadia.io/nexce:trial
+    image: localhost/nex-ce:local
     command: ["node", "up"]
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
       # Seed the embedded connector catalog
       YES_SEED: "1"
+    # Fedora-based podman machines run SELinux in enforcing mode, which blocks a
+    # container from connectin* to the bind-mounted podman socket.
+    security_opt:
+      - label=disable
     volumes:
-      - ./nex-ce.config.json:/etc/nex-ce/config.json
+      - ./nex-ce.config.json:/etc/nex-ce/config.json:ro
       # Host Podman socket bound into the container so Nex can run workloads.
-      # PODMAN_SOCK is detected per-OS and exported by scripts/start.sh:
-      #   Linux:  podman info --format '{{.Host.RemoteSocket.Path}}'
-      #   macOS:  podman machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}'
-      # The default below is the common Linux rootless path for running
-      # `docker compose` directly without start.sh.
       - ${PODMAN_SOCK:-/run/user/1000/podman/podman.sock}:/podman.sock
+      - /tmp/nexlet-podman-workloads:/tmp/nexlet-podman-workloads
     depends_on:
       control-plane:
         condition: service_started
