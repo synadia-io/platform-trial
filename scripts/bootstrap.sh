@@ -91,8 +91,6 @@ git checkout "$branch"
 . ./scripts/common.sh
 
 declare -r SYNADIA_CR_SERVER=registry.synadia.io
-declare SYNADIA_CR_USERNAME="${SYNADIA_CR_USERNAME-}"
-declare SYNADIA_CR_PASSWORD="${SYNADIA_CR_PASSWORD-}"
 
 if [ -n "$password_stdin" ]; then
   IFS= read -r SYNADIA_CR_PASSWORD </dev/stdin
@@ -107,18 +105,18 @@ if [ -n "$interactive" ]; then
   echo # add newline after reading silent input
 fi
 
-if [ -z "$SYNADIA_CR_USERNAME" ] && [ -z "$SYNADIA_CR_PASSWORD" ]; then
+if [ -z "${SYNADIA_CR_USERNAME:+set}" ] && [ -z "${SYNADIA_CR_PASSWORD:+set}" ]; then
   red "\nFailed to find Synadia container registry credentials\n\nSet $(bold SYNADIA_CR_USERNAME) and $(bold SYNADIA_CR_PASSWORD) environment variables or enable interactive mode with $(bold '--interactive')"
   exit 1
-elif [ -z "$SYNADIA_CR_USERNAME" ]; then
+elif [ -z "${SYNADIA_CR_USERNAME:+set}" ]; then
   red "\nFailed to find Synadia container registry username\n\nSet $(bold SYNADIA_CR_USERNAME) environment variable or enable interactive mode with $(bold '--interactive')"
   exit 1
-elif [ -z "$SYNADIA_CR_PASSWORD" ]; then
+elif [ -z "${SYNADIA_CR_PASSWORD:+set}" ]; then
   red "\nFailed to find Synadia container registry password\n\nSet $(bold SYNADIA_CR_PASSWORD) environment variable, pipe from stdin with $(bold '--password-stdin'), or enable interactive mode with $(bold '--interactive')"
   exit 1
 fi
 
-echo "$SYNADIA_CR_PASSWORD" | "$engine" login --username "${SYNADIA_CR_USERNAME}" --password-stdin "$SYNADIA_CR_SERVER"
+"$engine" login --username "$SYNADIA_CR_USERNAME" --password-stdin "$SYNADIA_CR_SERVER" <<<"$SYNADIA_CR_PASSWORD"
 
 cd ./scripts
 chmod u+x ./start.sh

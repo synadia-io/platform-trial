@@ -112,10 +112,8 @@ fi
 
 # === Registry credentials ===
 declare -r SYNADIA_CR_SERVER=registry.synadia.io
-declare SYNADIA_CR_USERNAME="${SYNADIA_CR_USERNAME-}"
-declare SYNADIA_CR_PASSWORD="${SYNADIA_CR_PASSWORD-}"
 
-if [ -z "$SYNADIA_CR_USERNAME" ] || [ -z "$SYNADIA_CR_PASSWORD" ]; then
+if [ -z "${SYNADIA_CR_USERNAME:+set}" ] || [ -z "${SYNADIA_CR_PASSWORD:+set}" ]; then
   red "\nFailed to find Synadia container registry credentials\n\nSet $(bold SYNADIA_CR_USERNAME) and $(bold SYNADIA_CR_PASSWORD) environment variables.\n\nIf you do not have credentials, $(link 'https://synadia.com/platform/trial' 'sign up here')."
   exit 1
 fi
@@ -141,12 +139,21 @@ kc() { kubectl --context "$KCTX" --namespace "$NAMESPACE" "$@"; }
 
 # === Image pull secret ===
 create_pull_secret() {
-  kubectl --context "$KCTX" --namespace "$1" \
-    create secret docker-registry synadia-registry \
-    --docker-server="$SYNADIA_CR_SERVER" \
-    --docker-username="$SYNADIA_CR_USERNAME" \
-    --docker-password="$SYNADIA_CR_PASSWORD" \
-    --dry-run=client -o yaml \
+  jq --null-input --arg ns "$1" --arg server "$SYNADIA_CR_SERVER" '
+    ($ENV.SYNADIA_CR_USERNAME) as $u
+    | ($ENV.SYNADIA_CR_PASSWORD) as $p
+    | {
+        apiVersion: "v1",
+        kind: "Secret",
+        type: "kubernetes.io/dockerconfigjson",
+        metadata: {name: "synadia-registry", namespace: $ns},
+        data: {
+          ".dockerconfigjson": (
+            {auths: {($server): {username: $u, password: $p, auth: ("\($u):\($p)" | @base64)}}}
+            | tojson | @base64
+          )
+        }
+      }' \
   | kubectl --context "$KCTX" --namespace "$1" apply -f -
 }
 create_pull_secret "$NAMESPACE"
@@ -158,12 +165,13 @@ helm repo update >/dev/null
 
 # === Start Control Plane ===
 bold '\nInstalling Control Plane...\n'
-helm --kube-context "$KCTX" upgrade --install control-plane synadia/control-plane \
+jq --null-input \
+  '{imagePullSecret: {username: $ENV.SYNADIA_CR_USERNAME, password: $ENV.SYNADIA_CR_PASSWORD}}' \
+| helm --kube-context "$KCTX" upgrade --install control-plane synadia/control-plane \
   --namespace "$NAMESPACE" \
   --version "$CONTROL_PLANE_CHART_VERSION" \
   --values k8s/control-plane.values.yaml \
-  --set "imagePullSecret.username=${SYNADIA_CR_USERNAME}" \
-  --set "imagePullSecret.password=${SYNADIA_CR_PASSWORD}" \
+  --values - \
   --wait --timeout 5m
 
 echo 'Waiting for control-plane to be ready...'
