@@ -130,12 +130,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: nex-ce
-          # TEMPORARY: a local build of ce-nex at nexlet.kubernetes 7b8f886, which
-          # adds config-document delivery. The released 0.3.0 image starts
-          # connector pods with no config file, so every connector fails with its
-          # own "required field" error. Point this back at a published tag once
-          # that change ships.
-          image: registry.synadia.io/nexce:0.3.0-configdoc
+          image: registry.synadia.io/nexce:0.3.1
           imagePullPolicy: IfNotPresent
           # Kong loads /etc/nex-ce/config.json automatically (cmd/main.go:45),
           # so the config path is a mount location, not a flag.

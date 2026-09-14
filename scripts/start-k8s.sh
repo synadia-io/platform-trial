@@ -137,28 +137,6 @@ kubectl --context "$KCTX" create namespace "$NAMESPACE" --dry-run=client -o yaml
   | kubectl --context "$KCTX" apply -f -
 kubectl config set-context "$KCTX" --namespace "$NAMESPACE" >/dev/null
 
-# === Side-load local images ===
-# Images built on this machine, for anything the registry cannot serve for this
-# node. Two cases today, both temporary:
-#   nexce:0.3.0-configdoc  a build with config-document delivery (see
-#                          k8s/nex-ce.yaml)
-#   connector images       published amd64-only, so an arm64 node cannot run
-#                          them; build locally from the connectors repo
-# A missing image is not an error: the cluster still starts, and only the
-# feature that needs it fails.
-load_local_images() {
-  local image
-  for image in "$@"; do
-    if docker image inspect "$image" >/dev/null 2>&1; then
-      bold "\nLoading local image ${image} into the cluster...\n"
-      kind load docker-image "$image" --name "$CLUSTER_NAME" >/dev/null
-    fi
-  done
-}
-load_local_images \
-  registry.synadia.io/nexce:0.3.0-configdoc \
-  registry.synadia.io/connector-synadia/mongodb:0.1.5
-
 kc() { kubectl --context "$KCTX" --namespace "$NAMESPACE" "$@"; }
 
 # === Image pull secret ===
