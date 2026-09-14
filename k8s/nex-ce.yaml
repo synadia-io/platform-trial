@@ -128,7 +128,6 @@ spec:
       containers:
         - name: nex-ce
           image: registry.synadia.io/nexce:0.3.1
-          imagePullPolicy: IfNotPresent
           # Kong loads /etc/nex-ce/config.json automatically (cmd/main.go:45),
           # so the config path is a mount location, not a flag.
           args:

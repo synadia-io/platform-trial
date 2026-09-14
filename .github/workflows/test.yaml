@@ -71,10 +71,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          echo '.env:'; cat .env
-          echo; echo 'shared.conf:'; cat shared.conf
-          echo; echo 'trial.creds:'; cat trial.creds
-          echo; echo 'http-gateway.creds:'; cat http-gateway.creds
+          echo 'shared.conf:'; cat shared.conf
           if [ "$NEX" = "true" ]; then
             echo; echo 'nex-ce.config.json:'; cat nex-ce.config.json
             echo; echo 'nex logs:'; ${ENGINE} compose logs nex
