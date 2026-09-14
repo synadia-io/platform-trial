@@ -1,9 +1,5 @@
 version: '3'
 
-env:
-  SYNADIA_CR_USERNAME: joe@synadia.com
-  SYNADIA_CR_PASSWORD: 2yy9bqjGYA3bmc678gQLweNHxUs
-
 tasks:
   default:
     cmds:
