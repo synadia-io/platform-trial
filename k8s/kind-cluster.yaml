@@ -1,0 +1,21 @@
+# kind cluster for the Synadia Platform trial.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: platform-trial
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      # Control Plane UI and API
+      - containerPort: 30080
+        hostPort: 8080
+        protocol: TCP
+      # HTTP Gateway
+      - containerPort: 30081
+        hostPort: 8081
+        protocol: TCP

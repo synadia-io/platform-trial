@@ -1,0 +1,36 @@
+version: '3'
+
+env:
+  SYNADIA_CR_USERNAME: joe@synadia.com
+  SYNADIA_CR_PASSWORD: 2yy9bqjGYA3bmc678gQLweNHxUs
+
+tasks:
+  default:
+    cmds:
+      - task --list
+    silent: true
+
+  start:
+    desc: Start the trial with Docker Compose
+    cmds:
+      - ./scripts/start.sh {{.CLI_ARGS}}
+
+  stop:
+    desc: Stop the Docker Compose trial and remove its volumes
+    cmds:
+      - ./scripts/stop.sh {{.CLI_ARGS}}
+
+  start:k8s:
+    desc: Start the trial on a local Kubernetes cluster (kind)
+    cmds:
+      - ./scripts/start-k8s.sh {{.CLI_ARGS}}
+
+  stop:k8s:
+    desc: Stop the Kubernetes trial by deleting the kind cluster
+    cmds:
+      - ./scripts/stop-k8s.sh {{.CLI_ARGS}}
+
+  test:
+    desc: Check that a running trial answers on the HTTP Gateway
+    cmds:
+      - ./scripts/test.sh

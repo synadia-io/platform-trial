@@ -1,0 +1,62 @@
+# NATS cluster values for the Synadia Platform trial.
+#
+# Chart: nats/nats (https://nats-io.github.io/k8s/helm/charts/)
+
+config:
+  cluster:
+    enabled: true
+    replicas: 3
+
+  jetstream:
+    enabled: true
+    fileStore:
+      pvc:
+        size: 4Gi
+
+  # Full resolver, backed by a PVC so account JWTs survive a pod restart
+  resolver:
+    enabled: true
+    merge:
+      type: full
+      allow_delete: true
+      interval: 2m
+      timeout: 1.9s
+    pvc:
+      size: 1Gi
+
+  # Pull in the operator/system_account/resolver_preload that start-k8s.sh
+  # renders into the nats-resolver Secret. Keys ending in $include become
+  # nats-server include directives; the path is relative to
+  # /etc/nats-config/nats.conf.
+  merge:
+    zzz$include: ./operator/operator.conf
+
+# Mount the bootstrap-generated Secret next to the generated nats.conf.
+#
+# These use `patch` (a JSON Patch) rather than `merge`. A merge REPLACES the
+# whole list, which drops the chart's own `config` and `pid` volumes and leaves
+# nats-server with no /etc/nats-config/nats.conf. The "/-" path appends instead.
+statefulSet:
+  patch:
+    - op: add
+      path: /spec/template/spec/volumes/-
+      value:
+        name: operator-conf
+        secret:
+          secretName: nats-resolver
+          optional: true
+
+container:
+  patch:
+    - op: add
+      path: /volumeMounts/-
+      value:
+        name: operator-conf
+        mountPath: /etc/nats-config/operator
+        readOnly: true
+
+# The trial does not need the reloader or exporter sidecars
+reloader:
+  enabled: false
+promExporter:
+  enabled: false

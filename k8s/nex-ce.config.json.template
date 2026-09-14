@@ -1,0 +1,29 @@
+{
+  "name": "nex",
+  "node_seed": "${NEX_NODE_SEED}",
+  "logger": {
+    "level": "info"
+  },
+  "nexlets": {
+    "containers-kubernetes": {
+      "enabled": true,
+      "registerType": "container",
+      "k8sNamespace": "${NEX_WORKLOADS_NAMESPACE}"
+    },
+    "connectors-kubernetes": {
+      "enabled": true,
+      "registerType": "connector",
+      "k8sNamespace": "${NEX_WORKLOADS_NAMESPACE}"
+    }
+  },
+  "platform": {
+    "enabled": true,
+    "url": "http://control-plane:8080",
+    "token": "${NEX_PLATFORM_TOKEN}"
+  },
+  "catalog": {
+    "enabled": true,
+    "id": "${NEX_CATALOG_ID}",
+    "token": "${NEX_CATALOG_TOKEN}"
+  }
+}
