@@ -380,7 +380,9 @@ EOF
 # (e.g. docker-compose) that does not share the engine's registry auth, so the
 # authenticated `<engine> pull` must fetch this private image first.
 $CONTAINER_ENGINE pull registry.synadia.io/http-gateway:latest
-$COMPOSE_CMD up --detach --wait http-gateway
+# --no-deps: the dependencies already run. Without it, compose on Podman
+# recreates nats and control-plane, and JetStream is briefly unavailable.
+$COMPOSE_CMD up --detach --wait --no-deps http-gateway
 
 HTTP_GATEWAY_TOKEN=$(request POST "/nats-users/${HTTP_GATEWAY_NATS_USER_ID}/http-gw-token" | jq --raw-output .token)
 echo "HTTP_GATEWAY_TOKEN=\"${HTTP_GATEWAY_TOKEN}\"" >> .env
@@ -453,7 +455,8 @@ start_nex() {
   # See the http-gateway pre-pull note above: fetch the private image with the
   # authenticated engine CLI before compose brings the service up.
   $CONTAINER_ENGINE pull registry.synadia.io/nexce:trial
-  $COMPOSE_CMD up --detach --wait nex
+  # --no-deps: see the http-gateway note above
+  $COMPOSE_CMD up --detach --wait --no-deps nex
   bold '\nNex node started.\n'
 }
 
