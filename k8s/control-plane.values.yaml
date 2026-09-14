@@ -3,11 +3,9 @@
 # Chart: synadia/control-plane (https://synadia-io.github.io/helm-charts)
 # Docs:  https://docs.synadia.com/platform/control-plane/deployment/kubernetes
 
-# The trial runs the 1.15.0-rc.0 image on chart 1.14.0. No 1.15 chart is
-# published yet, so the tag is overridden here rather than by a chart version.
 container:
   image:
-    tag: 1.15.0-rc.0
+    tag: 1.15.0-rc.1
 
 # Reached through the kind extraPortMapping on hostPort 8080
 config:

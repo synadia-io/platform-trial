@@ -9,9 +9,6 @@
 #
 # scripts/start-k8s.sh renders nex-ce.config.json from
 # nex-ce.config.json.template and creates the nex-config Secret from it.
-#
-# The Kubernetes nexlets need no Podman socket. Nex talks to the API server with
-# the ServiceAccount below and creates real Deployments, Jobs and Pods.
 ---
 apiVersion: v1
 kind: ServiceAccount
