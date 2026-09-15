@@ -127,9 +127,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: nex-ce
-          image: registry.synadia.io/nexce:0.3.1
-          # Kong loads /etc/nex-ce/config.json automatically (cmd/main.go:45),
-          # so the config path is a mount location, not a flag.
+          image: registry.synadia.io/nexce:0.3.3
           args:
             - node
             - up
