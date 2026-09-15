@@ -547,7 +547,40 @@ start_nex() {
   # authenticated engine CLI before compose brings the service up.
   $CONTAINER_ENGINE pull registry.synadia.io/nexce:trial
   $COMPOSE_CMD up --detach --wait nex
-  bold '\nNex node started.\n'
+
+  count_nex_agents() {
+    $COMPOSE_CMD logs nex 2>&1 | grep --count 'agent registered' || true
+  }
+
+  wait_for_nex_agents() {
+    local restarts=3 waited seen
+
+    for (( attempt = 0; attempt <= restarts; attempt++ )); do
+      # Give the node up to 45s to register before deciding it is stuck.
+      for (( waited = 0; waited < 45; waited += 5 )); do
+        seen=$(count_nex_agents)
+        if [ "$seen" -gt 0 ]; then
+          bold '\nNex node started with agents registered.\n'
+          return 0
+        fi
+        sleep 5
+      done
+
+      if [ "$attempt" -eq "$restarts" ]; then
+        break
+      fi
+
+      bold "\nNex node has no agents yet; restarting it ($(( attempt + 1 ))/${restarts})...\n"
+      $COMPOSE_CMD restart nex >/dev/null
+    done
+
+    red 'Nex node started without any agents.' >&2
+    red 'Workloads and Connectors will not run. Check the logs:' >&2
+    red "  $COMPOSE_CMD logs nex" >&2
+    return 1
+  }
+
+  wait_for_nex_agents
 }
 
 cat <<EOF
