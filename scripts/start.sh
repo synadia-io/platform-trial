@@ -159,7 +159,9 @@ retry_with_backoff() {
 detect_podman_socket() {
   case "$(uname -s)" in
     Darwin)
-      podman machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}' 2>/dev/null | head -n1
+      if podman machine inspect --format '{{.State}}' 2>/dev/null | grep --quiet running; then
+        echo '/run/podman/podman.sock'
+      fi
       ;;
     *)
       podman info --format '{{.Host.RemoteSocket.Path}}' 2>/dev/null | head -n1
