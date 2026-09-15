@@ -159,8 +159,17 @@ retry_with_backoff() {
 detect_podman_socket() {
   case "$(uname -s)" in
     Darwin)
-      if podman machine inspect --format '{{.State}}' 2>/dev/null | grep --quiet running; then
+      local state rootful uid
+      state=$(podman machine inspect --format '{{.State}}' 2>/dev/null | head -n1)
+      [ "$state" = 'running' ] || return 0
+
+      rootful=$(podman machine inspect --format '{{.Rootful}}' 2>/dev/null | head -n1)
+      if [ "$rootful" = 'true' ]; then
         echo '/run/podman/podman.sock'
+      else
+        # Rootless machines serve the socket under the VM user's runtime dir.
+        uid=$(podman machine ssh id -u 2>/dev/null | tr -d '[:space:]')
+        echo "/run/user/${uid:-1000}/podman/podman.sock"
       fi
       ;;
     *)
