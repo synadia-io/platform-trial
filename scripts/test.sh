@@ -53,9 +53,18 @@ if [ -f nex-ce.config.json ]; then
   fi
 
   # The node can log "ready" even when a nexlet fails, so errors and a node
-  # without agents also count as failures
-  if compose logs nex 2>&1 | grep -E '\[ERROR\]|nex node started without any agents' >&2; then
+  # without agents also count as failures.
+  full_log=$(compose logs nex 2>&1)
+  last_start=$(printf '%s' "$full_log" | awk '/nex node ready/ { out = "" } { out = out $0 ORS } END { printf "%s", out }')
+
+  if printf '%s' "$last_start" | grep -E '\[ERROR\]|nex node started without any agents' >&2; then
     red 'Nex node logged errors or started without any agents' >&2
+    exit 1
+  fi
+
+  if ! printf '%s' "$full_log" | grep -q 'agent registered'; then
+    red 'Nex node started without any agents' >&2
+    printf '%s\n' "$full_log" >&2
     exit 1
   fi
 

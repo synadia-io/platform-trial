@@ -542,6 +542,33 @@ start_nex() {
     --data '{"connectors": true, "workloads": true}' >/dev/null
   bold '\nEnabled workloads and connectors on the trial account\n'
 
+  # Wait until the account's JetStream is live before Nex starts.
+  wait_for_account_jetstream() {
+    local waited status
+    for (( waited = 0; waited < 120; waited += 3 )); do
+      status=$(curl \
+        -H "Authorization: Bearer $ADMIN_TOKEN" \
+        -H 'Accept: application/json' \
+        --silent \
+        --output /dev/null \
+        --connect-timeout 30 \
+        --write-out '%{http_code}' \
+        "$BASE_URL/accounts/${ACCOUNT_ID}/jetstream/streams/")
+
+      if [ "$status" -lt 400 ]; then
+        bold '\nAccount JetStream is live.\n'
+        return 0
+      fi
+      sleep 3
+    done
+
+    red "Account JetStream did not come up (last status: ${status})." >&2
+    red 'Nex needs it for the catalog stream; not starting Nex.' >&2
+    return 1
+  }
+
+  wait_for_account_jetstream
+
   # Render the real config from the template (jq overwrites the placeholders)
   jq \
     --arg node_seed "$NEX_NODE_SEED" \
