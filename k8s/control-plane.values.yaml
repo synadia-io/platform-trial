@@ -1,0 +1,45 @@
+# Control Plane values for the Synadia Platform trial.
+#
+# Chart: synadia/control-plane (https://synadia-io.github.io/helm-charts)
+# Docs:  https://docs.synadia.com/platform/control-plane/deployment/kubernetes
+
+container:
+  image:
+    tag: 1.15.0-rc.1
+
+# Reached through the kind extraPortMapping on hostPort 8080
+config:
+  server:
+    url: http://localhost:8080
+    httpPort: 8080
+
+# singleReplicaMode runs an embedded Postgres and Prometheus so the trial needs
+# no external data sources. The chart defaults to 1Gi + 10Gi + 10Gi of PVCs;
+# 21Gi is more than a local trial needs, so the two large ones are trimmed.
+singleReplicaMode:
+  enabled: true
+  encryptionPvc:
+    enabled: true
+    size: 1Gi
+  postgresPvc:
+    enabled: true
+    size: 2Gi
+  prometheusPvc:
+    enabled: true
+    size: 2Gi
+
+# NodePort 30080 pairs with the hostPort 8080 mapping in kind-cluster.yaml
+service:
+  merge:
+    spec:
+      type: NodePort
+      ports:
+        - name: http
+          port: 8080
+          targetPort: http
+          nodePort: 30080
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi

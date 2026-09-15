@@ -1,0 +1,34 @@
+# HTTP Gateway values for the Synadia Platform trial.
+#
+# Chart: synadia/http-gateway (https://synadia-io.github.io/helm-charts)
+# Docs:  https://docs.synadia.com/platform/http-gateway/gateway_deployment
+#
+# scripts/start-k8s.sh creates the http-gateway-creds Secret from the creds that
+# Control Plane mints, then installs this chart.
+
+global:
+  image:
+    pullSecretNames:
+      - synadia-registry
+
+config:
+  # In-cluster NATS, so no host.docker.internal hairpin
+  url: nats://nats.platform-trial.svc.cluster.local:4222
+  httpPort: 8081
+  # Advertised to callers through the kind hostPort mapping
+  advertise: http://localhost:8081
+  tokensBucket: tokens
+  creds:
+    secretName: http-gateway-creds
+    key: nats.creds
+
+# NodePort 30081 pairs with the hostPort 8081 mapping in kind-cluster.yaml
+service:
+  merge:
+    spec:
+      type: NodePort
+      ports:
+        - name: http
+          port: 8081
+          targetPort: http
+          nodePort: 30081

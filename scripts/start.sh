@@ -11,6 +11,9 @@ cd "$(dirname "$0")/.."
 
 # shellcheck source=./common.sh
 . ./scripts/common.sh
+# Control Plane API helpers shared with scripts/start-k8s.sh
+# shellcheck source=./bootstrap-lib.sh
+. ./scripts/bootstrap-lib.sh
 
 # === Usage ===
 declare copy_password=
@@ -94,20 +97,6 @@ check_command() {
   command -v "$1" >/dev/null 2>&1
 }
 
-# generate an alphanumeric password with openssl, falling back if openssl is not installed
-generate_password() {
-  if check_command openssl; then
-    openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 16
-  else
-    printf 'admin'
-  fi
-}
-
-# generate a NUID (https://github.com/nats-io/nuid): 22 base62 characters
-generate_nuid() {
-  LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom 2>/dev/null | head -c 22 || true
-}
-
 # find control-plane container errors
 find_errors() {
   $COMPOSE_CMD logs control-plane | grep -C1 '\[ERROR\]'
@@ -130,28 +119,6 @@ copy_to_clipboard() {
   fi
 }
 
-# Retry the command until it succeeds or the retry limit is reached
-retry_with_backoff() {
-  set +e
-  CMD="$1"
-  MAX_RETRY="${2-10}"
-  RESULT="$($CMD)"
-  rt="$?"
-  local retries=1
-  while [ "$rt" -ne 0 ]; do
-    sleep 1
-    echo "Retrying... ($retries/$MAX_RETRY)"
-    RESULT="$($CMD)"
-    rt="$?"
-    (( retries+=1 ))
-    if [ $retries -gt "$MAX_RETRY" ]; then
-      red "Max retries reached ($MAX_RETRY)" >&2
-      exit "$rt"
-    fi
-  done
-  printf '%s' "$RESULT"
-  set -e
-}
 
 # Detect the host Podman socket path in an OS-agnostic way. On macOS the socket
 # is exposed by `podman machine`; on Linux it is the native (rootless or
@@ -167,37 +134,6 @@ detect_podman_socket() {
   esac
 }
 
-# Enable a platform component on the system and return its `pcm_` token. The flow
-# is: enable the component, re-read the system to find the component ID, then
-# fetch the component token.
-#   $1 = system ID, $2 = component type (e.g. "workloads", "catalog")
-#   $3 = optional component config as a JSON object (e.g. {"catalog_id":"..."})
-get_platform_component_token() {
-  local system_id="$1"
-  local component_type="$2"
-  local config="${3-}"
-
-  local body
-  if [ -n "$config" ]; then
-    body=$(jq --compact-output --null-input --arg type "$component_type" --argjson config "$config" \
-      '{type: $type, enabled: true, config: $config}')
-  else
-    body=$(jq --compact-output --null-input --arg type "$component_type" '{type: $type, enabled: true}')
-  fi
-
-  request PATCH "/systems/${system_id}/platform-components/" --data "$body" >/dev/null
-
-  local component_id
-  component_id=$(request GET "/systems/${system_id}" \
-    | jq --raw-output --arg type "$component_type" '.platform_components.components[] | select(.type == $type) | .id')
-
-  if [ -z "$component_id" ] || [ "$component_id" = 'null' ]; then
-    red "Failed to find ${component_type} platform component ID for system ${system_id}" >&2
-    exit 1
-  fi
-
-  request GET "/systems/${system_id}/platform-components/${component_id}/tokens" | jq --raw-output .token
-}
 
 # Resolve the compose command for the selected engine, preferring the built-in
 # `<engine> compose` subcommand and falling back to the standalone binary.
@@ -220,33 +156,6 @@ declare -r ADMIN_USERNAME=admin
 # shellcheck disable=SC2155
 declare -r ADMIN_PASSWORD="$(generate_password)"
 declare ADMIN_TOKEN=''
-
-# Make an API request with the generated admin token
-request() {
-  METHOD="$1"
-  URL="$BASE_URL$2"
-  echo "$METHOD $URL" 1>&2
-
-  OUTPUT_FILE=$(mktemp)
-  HTTP_CODE=$(curl \
-    -H "Authorization: Bearer $ADMIN_TOKEN" \
-    -H 'Accept: application/json' \
-    -H 'Content-Type: application/json' \
-    -X "$METHOD" \
-    --silent \
-    --output "$OUTPUT_FILE" \
-    --connect-timeout 30 \
-    --write-out "%{http_code}" \
-    "${@:3}" \
-    "$URL")
-
-  if [ "${HTTP_CODE}" -gt 399 ]; then
-    red "$1 $URL failed with response: [$HTTP_CODE] $(cat "$OUTPUT_FILE")" >&2
-    exit "${HTTP_CODE}"
-  fi
-  cat "$OUTPUT_FILE"
-  rm "$OUTPUT_FILE"
-}
 
 # === Verify required commands ===
 docker_error_msg=$(cat <<EOF
@@ -471,7 +380,9 @@ EOF
 # (e.g. docker-compose) that does not share the engine's registry auth, so the
 # authenticated `<engine> pull` must fetch this private image first.
 $CONTAINER_ENGINE pull registry.synadia.io/http-gateway:latest
-$COMPOSE_CMD up --detach --wait http-gateway
+# --no-deps: the dependencies already run. Without it, compose on Podman
+# recreates nats and control-plane, and JetStream is briefly unavailable.
+$COMPOSE_CMD up --detach --wait --no-deps http-gateway
 
 HTTP_GATEWAY_TOKEN=$(request POST "/nats-users/${HTTP_GATEWAY_NATS_USER_ID}/http-gw-token" | jq --raw-output .token)
 echo "HTTP_GATEWAY_TOKEN=\"${HTTP_GATEWAY_TOKEN}\"" >> .env
@@ -544,7 +455,8 @@ start_nex() {
   # See the http-gateway pre-pull note above: fetch the private image with the
   # authenticated engine CLI before compose brings the service up.
   $CONTAINER_ENGINE pull registry.synadia.io/nexce:trial
-  $COMPOSE_CMD up --detach --wait nex
+  # --no-deps: see the http-gateway note above
+  $COMPOSE_CMD up --detach --wait --no-deps nex
   bold '\nNex node started.\n'
 }
 
