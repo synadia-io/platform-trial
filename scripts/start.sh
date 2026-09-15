@@ -159,7 +159,18 @@ retry_with_backoff() {
 detect_podman_socket() {
   case "$(uname -s)" in
     Darwin)
-      podman machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}' 2>/dev/null | head -n1
+      local state rootful uid
+      state=$(podman machine inspect --format '{{.State}}' 2>/dev/null | head -n1)
+      [ "$state" = 'running' ] || return 0
+
+      rootful=$(podman machine inspect --format '{{.Rootful}}' 2>/dev/null | head -n1)
+      if [ "$rootful" = 'true' ]; then
+        echo '/run/podman/podman.sock'
+      else
+        # Rootless machines serve the socket under the VM user's runtime dir.
+        uid=$(podman machine ssh id -u 2>/dev/null | tr -d '[:space:]')
+        echo "/run/user/${uid:-1000}/podman/podman.sock"
+      fi
       ;;
     *)
       podman info --format '{{.Host.RemoteSocket.Path}}' 2>/dev/null | head -n1
@@ -531,6 +542,33 @@ start_nex() {
     --data '{"connectors": true, "workloads": true}' >/dev/null
   bold '\nEnabled workloads and connectors on the trial account\n'
 
+  # Wait until the account's JetStream is live before Nex starts.
+  wait_for_account_jetstream() {
+    local waited status
+    for (( waited = 0; waited < 120; waited += 3 )); do
+      status=$(curl \
+        -H "Authorization: Bearer $ADMIN_TOKEN" \
+        -H 'Accept: application/json' \
+        --silent \
+        --output /dev/null \
+        --connect-timeout 30 \
+        --write-out '%{http_code}' \
+        "$BASE_URL/accounts/${ACCOUNT_ID}/jetstream/streams/")
+
+      if [ "$status" -lt 400 ]; then
+        bold '\nAccount JetStream is live.\n'
+        return 0
+      fi
+      sleep 3
+    done
+
+    red "Account JetStream did not come up (last status: ${status})." >&2
+    red 'Nex needs it for the catalog stream; not starting Nex.' >&2
+    return 1
+  }
+
+  wait_for_account_jetstream
+
   # Render the real config from the template (jq overwrites the placeholders)
   jq \
     --arg node_seed "$NEX_NODE_SEED" \
@@ -545,7 +583,40 @@ start_nex() {
   # authenticated engine CLI before compose brings the service up.
   $CONTAINER_ENGINE pull registry.synadia.io/nexce:trial
   $COMPOSE_CMD up --detach --wait nex
-  bold '\nNex node started.\n'
+
+  count_nex_agents() {
+    $COMPOSE_CMD logs nex 2>&1 | grep --count 'agent registered' || true
+  }
+
+  wait_for_nex_agents() {
+    local restarts=3 waited seen
+
+    for (( attempt = 0; attempt <= restarts; attempt++ )); do
+      # Give the node up to 45s to register before deciding it is stuck.
+      for (( waited = 0; waited < 45; waited += 5 )); do
+        seen=$(count_nex_agents)
+        if [ "$seen" -gt 0 ]; then
+          bold '\nNex node started with agents registered.\n'
+          return 0
+        fi
+        sleep 5
+      done
+
+      if [ "$attempt" -eq "$restarts" ]; then
+        break
+      fi
+
+      bold "\nNex node has no agents yet; restarting it ($(( attempt + 1 ))/${restarts})...\n"
+      $COMPOSE_CMD restart nex >/dev/null
+    done
+
+    red 'Nex node started without any agents.' >&2
+    red 'Workloads and Connectors will not run. Check the logs:' >&2
+    red "  $COMPOSE_CMD logs nex" >&2
+    return 1
+  }
+
+  wait_for_nex_agents
 }
 
 cat <<EOF

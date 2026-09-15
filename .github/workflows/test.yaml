@@ -58,7 +58,7 @@ jobs:
       - name: Test
         shell: bash
         working-directory: platform-trial
-        run: ./scripts/test.sh
+        run: ./scripts/test.sh ${{ matrix.engine == 'podman' && '--podman' || '' }}
 
       - name: Stop
         shell: bash
