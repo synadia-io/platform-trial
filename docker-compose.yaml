@@ -90,12 +90,14 @@ services:
     environment:
       # Seed the embedded connector catalog
       YES_SEED: "1"
+    security_opt:
+      - label=disable
     volumes:
       - ./nex-ce.config.json:/etc/nex-ce/config.json
-      # Host Podman socket bound into the container so Nex can run workloads.
+      # Podman socket bound into the container so Nex can run workloads.
       # PODMAN_SOCK is detected per-OS and exported by scripts/start.sh:
       #   Linux:  podman info --format '{{.Host.RemoteSocket.Path}}'
-      #   macOS:  podman machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}'
+      #   macOS:  /run/podman/podman.sock, the socket inside the podman machine.
       # The default below is the common Linux rootless path for running
       # `docker compose` directly without start.sh.
       - ${PODMAN_SOCK:-/run/user/1000/podman/podman.sock}:/podman.sock
