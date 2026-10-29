@@ -642,6 +642,57 @@ start_nex() {
   }
 
   wait_for_nex_agents
+
+  # Nex pulls connector images through the podman socket without registry
+  # credentials, so the pull fails for private images. Pull every image in the
+  # connector catalog here with the logged-in podman CLI instead. Nex seeds the
+  # catalog on its first start. Always use podman, whatever the engine, because
+  # Nex runs connectors with podman.
+  pull_connector_images() {
+    local connectors_url="localhost:8080/api/connectors/alpha/${ACCOUNT_ID}"
+    local components='' images image waited
+
+    connectors_get() {
+      curl \
+        -H "Authorization: Bearer $ADMIN_TOKEN" \
+        -H 'Accept: application/json' \
+        --silent \
+        --fail \
+        --connect-timeout 30 \
+        "${connectors_url}$1"
+    }
+
+    for (( waited = 0; waited < 60; waited += 3 )); do
+      components=$(connectors_get /components \
+        | jq --raw-output '.items[] | .collection.id as $c | .id as $id | .versions[] | "\($c)/\($id)/\(.version)"' \
+        2>/dev/null) || true
+      if [ -n "$components" ]; then
+        break
+      fi
+      sleep 3
+    done
+
+    if [ -z "$components" ]; then
+      red 'Could not read the connector catalog; skipping the connector image pull.' >&2
+      red 'Connectors with private images will fail to start until you pull them with podman.' >&2
+      return 0
+    fi
+
+    images=$(while read -r component; do
+      connectors_get "/components/${component}" | jq --raw-output '.start_request_schema.template.image // empty'
+    done <<< "$components" | sort -u) || true
+
+    bold '\nPulling connector images so Nex can start connectors...\n'
+    while read -r image; do
+      [ -n "$image" ] || continue
+      if ! podman pull "$image"; then
+        red "Failed to pull ${image}; connectors that use it will not start." >&2
+        red "Run $(bold 'podman login registry.synadia.io'), then $(bold "podman pull ${image}")." >&2
+      fi
+    done <<< "$images"
+  }
+
+  pull_connector_images
 }
 
 cat <<EOF
