@@ -7,7 +7,10 @@
 
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+# Use the physical path: compose builds bind-mount sources from the working
+# directory, and a symlinked path such as macOS /tmp (-> /private/tmp) does not
+# exist inside the podman machine VM, so podman mounts an empty directory.
+cd "$(cd "$(dirname "$0")/.." && pwd -P)"
 
 # shellcheck source=./common.sh
 . ./scripts/common.sh
@@ -320,7 +323,29 @@ trap print_control_plane_errors EXIT
 
 $COMPOSE_CMD up --detach control-plane
 echo 'Waiting for control-plane to be ready...'
-grep --quiet 'control plane started' <($COMPOSE_CMD logs --follow control-plane)
+
+# Poll the logs rather than follow them: a followed log can block forever when
+# the container exits before it logs the ready message.
+wait_for_control_plane() {
+  local waited
+  for (( waited = 0; waited < 120; waited += 2 )); do
+    if $COMPOSE_CMD logs control-plane 2>&1 | grep --quiet 'control plane started'; then
+      return 0
+    fi
+    if [ -z "$($COMPOSE_CMD ps --quiet --status running control-plane)" ]; then
+      red 'control-plane exited before it was ready:' >&2
+      $COMPOSE_CMD logs control-plane >&2
+      return 1
+    fi
+    sleep 2
+  done
+
+  red 'control-plane did not become ready within 120s:' >&2
+  $COMPOSE_CMD logs control-plane >&2
+  return 1
+}
+
+wait_for_control_plane
 echo 'control-plane is ready.'
 
 # Wait until control-plane succesfully starts before (over)writing .env file
@@ -617,6 +642,57 @@ start_nex() {
   }
 
   wait_for_nex_agents
+
+  # Nex pulls connector images through the podman socket without registry
+  # credentials, so the pull fails for private images. Pull every image in the
+  # connector catalog here with the logged-in podman CLI instead. Nex seeds the
+  # catalog on its first start. Always use podman, whatever the engine, because
+  # Nex runs connectors with podman.
+  pull_connector_images() {
+    local connectors_url="localhost:8080/api/connectors/alpha/${ACCOUNT_ID}"
+    local components='' images image waited
+
+    connectors_get() {
+      curl \
+        -H "Authorization: Bearer $ADMIN_TOKEN" \
+        -H 'Accept: application/json' \
+        --silent \
+        --fail \
+        --connect-timeout 30 \
+        "${connectors_url}$1"
+    }
+
+    for (( waited = 0; waited < 60; waited += 3 )); do
+      components=$(connectors_get /components \
+        | jq --raw-output '.items[] | .collection.id as $c | .id as $id | .versions[] | "\($c)/\($id)/\(.version)"' \
+        2>/dev/null) || true
+      if [ -n "$components" ]; then
+        break
+      fi
+      sleep 3
+    done
+
+    if [ -z "$components" ]; then
+      red 'Could not read the connector catalog; skipping the connector image pull.' >&2
+      red 'Connectors with private images will fail to start until you pull them with podman.' >&2
+      return 0
+    fi
+
+    images=$(while read -r component; do
+      connectors_get "/components/${component}" | jq --raw-output '.start_request_schema.template.image // empty'
+    done <<< "$components" | sort -u) || true
+
+    bold '\nPulling connector images so Nex can start connectors...\n'
+    while read -r image; do
+      [ -n "$image" ] || continue
+      if ! podman pull "$image"; then
+        red "Failed to pull ${image}; connectors that use it will not start." >&2
+        red "Run $(bold 'podman login registry.synadia.io'), then $(bold "podman pull ${image}")." >&2
+      fi
+    done <<< "$images"
+  }
+
+  pull_connector_images
 }
 
 cat <<EOF
