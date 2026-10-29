@@ -35,6 +35,20 @@ jobs:
           pipx install podman-compose
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      # Ubuntu 26.04 confines podman under its own AppArmor profile, and the
+      # pasta profile does not let podman signal pasta. Podman then cannot
+      # remove the rootless network on `compose down` ("rootless netns: kill
+      # network process: permission denied"). Let pasta receive the signal.
+      - name: Allow podman to stop pasta
+        if: matrix.engine == 'podman' || matrix.nex
+        shell: bash
+        run: |
+          profile=/etc/apparmor.d/usr.bin.pasta
+          if [ -f "$profile" ] && ! sudo grep -q 'peer=podman' "$profile"; then
+            sudo sed -i 's|^  include <abstractions/pasta>|&\n  signal (receive) peer=podman,|' "$profile"
+            sudo apparmor_parser -r "$profile"
+          fi
+
       - name: Test bootstrap.sh
         env:
           SYNADIA_CR_USERNAME: ${{ secrets.SYNADIA_CR_USERNAME }}
