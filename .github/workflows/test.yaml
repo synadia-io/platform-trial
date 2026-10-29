@@ -8,7 +8,10 @@ jobs:
   test:
     name: Test Scripts (${{ matrix.engine }}${{ matrix.nex && ', nex' || '' }})
     timeout-minutes: 15
-    runs-on: ubuntu-latest
+    # ubuntu-latest is now 26.04, where rootless podman cannot remove its
+    # network on `compose down` ("rootless netns: kill network process:
+    # permission denied"). Keep 24.04 until that works.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
