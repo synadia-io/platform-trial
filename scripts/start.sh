@@ -7,7 +7,10 @@
 
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+# Use the physical path: compose builds bind-mount sources from the working
+# directory, and a symlinked path such as macOS /tmp (-> /private/tmp) does not
+# exist inside the podman machine VM, so podman mounts an empty directory.
+cd "$(cd "$(dirname "$0")/.." && pwd -P)"
 
 # shellcheck source=./common.sh
 . ./scripts/common.sh
