@@ -323,7 +323,29 @@ trap print_control_plane_errors EXIT
 
 $COMPOSE_CMD up --detach control-plane
 echo 'Waiting for control-plane to be ready...'
-grep --quiet 'control plane started' <($COMPOSE_CMD logs --follow control-plane)
+
+# Poll the logs rather than follow them: a followed log can block forever when
+# the container exits before it logs the ready message.
+wait_for_control_plane() {
+  local waited
+  for (( waited = 0; waited < 120; waited += 2 )); do
+    if $COMPOSE_CMD logs control-plane 2>&1 | grep --quiet 'control plane started'; then
+      return 0
+    fi
+    if [ -z "$($COMPOSE_CMD ps --quiet --status running control-plane)" ]; then
+      red 'control-plane exited before it was ready:' >&2
+      $COMPOSE_CMD logs control-plane >&2
+      return 1
+    fi
+    sleep 2
+  done
+
+  red 'control-plane did not become ready within 120s:' >&2
+  $COMPOSE_CMD logs control-plane >&2
+  return 1
+}
+
+wait_for_control_plane
 echo 'control-plane is ready.'
 
 # Wait until control-plane succesfully starts before (over)writing .env file
